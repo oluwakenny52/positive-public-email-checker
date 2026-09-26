@@ -97,57 +97,35 @@ if "proxy_stats" not in st.session_state:
 if "help_states" not in st.session_state:
     st.session_state.help_states = {}
 
-# --- Universal Helper Renderer (Question Mark Button) ---
-def instant_help_public(key_name, description_text, label_text, widget_type="label", **kwargs):
-    if key_name not in st.session_state.help_states:
-        st.session_state.help_states[key_name] = {"visible": False, "time": 0}
-    
-    state_data = st.session_state.help_states[key_name]
-    if state_data.get("visible", False):
-        if time.time() - state_data.get("time", 0) > 10.0:
-            st.session_state.help_states[key_name]["visible"] = False
-
-    col_lbl, col_btn = st.sidebar.columns([0.85, 0.15])
-    
-    with col_lbl:
-        st.markdown(f"**{label_text}**")
-
-    with col_btn:
-        if st.button("❓", key=f"help_btn_{key_name}", help="Toggle help description"):
-            current = st.session_state.help_states[key_name]["visible"]
-            st.session_state.help_states[key_name] = {"visible": not current, "time": time.time()}
-            st.rerun()
-
-    if st.session_state.help_states[key_name]["visible"]:
-        st.sidebar.markdown(f"<div class='help-box'>💡 {description_text}</div>", unsafe_allow_html=True)
+DEFAULT_BROWSER_CFG = {
+    "BROWSER_TIMEOUT": 45,
+    "MAX_ACCOUNTS": 5000,
+    "DELAY_BETWEEN_ACCOUNTS": 75,
+    "REST_AFTER_FAIL": 120,
+    "REST_AFTER_SUCCESS": 45,
+    "TYPING_MS": 100,
+    "PAGE_WAIT_S": 3,
+    "MIN_PROXY_SCORE": 40,
+    "MAX_TRIES_PER_ACCOUNT": 2,
+    "PROXY_MODE": "fallback",
+    "POOL_MODE": "us_only",
+    "POOL_COUNTRY": "US",
+    "POOL_MIX": "US,GB,DE",
+    "DEBUG": True,
+    "FIRE_UP": False,
+    "USE_PROXIES": True,
+    "STEALTH": True,
+    "WARMUP": True,
+    "FORCE_EN_US": True,
+    "SCREENSHOT_FINAL": True,
+    "WEBAUTHN_OFF": True,
+    "RETRY_CF": False,
+    "DEBUG_DIR": "browser_debug",
+    "RESULTS_DIR": "mail_results",
+}
 
 if "BROWSER_CFG" not in st.session_state:
-    st.session_state.BROWSER_CFG = {
-        "BROWSER_TIMEOUT": 45,
-        "MAX_ACCOUNTS": 5000,
-        "DELAY_BETWEEN_ACCOUNTS": 75,
-        "REST_AFTER_FAIL": 120,
-        "REST_AFTER_SUCCESS": 45,
-        "TYPING_MS": 100,
-        "PAGE_WAIT_S": 3,
-        "MIN_PROXY_SCORE": 40,
-        "MAX_TRIES_PER_ACCOUNT": 2,
-        "PROXY_MODE": "fallback",
-        "POOL_MODE": "us_only",
-        "POOL_COUNTRY": "US",
-        "POOL_MIX": "US,GB,DE",
-        "DEBUG": True,
-        "FIRE_UP": False,
-        "USE_PROXIES": True,
-        "STEALTH": True,
-        "WARMUP": True,
-        "FORCE_EN_US": True,
-        "SCREENSHOT_FINAL": True,
-        "WEBAUTHN_OFF": True,
-        "RETRY_CF": False,
-        "DEBUG_DIR": "browser_debug",
-        "RESULTS_DIR": "mail_results",
-    }
+    st.session_state.BROWSER_CFG = DEFAULT_BROWSER_CFG.copy()
 
 MODE_PRESETS = {
     "slow": {
@@ -187,6 +165,30 @@ MODE_PRESETS = {
         "PAGE_WAIT_S": 2,
     },
 }
+
+# --- Universal Helper Renderer (Question Mark Button) ---
+def instant_help_public(key_name, description_text, label_text, widget_type="label", **kwargs):
+    if key_name not in st.session_state.help_states:
+        st.session_state.help_states[key_name] = {"visible": False, "time": 0}
+    
+    state_data = st.session_state.help_states[key_name]
+    if state_data.get("visible", False):
+        if time.time() - state_data.get("time", 0) > 10.0:
+            st.session_state.help_states[key_name]["visible"] = False
+
+    col_lbl, col_btn = st.sidebar.columns([0.85, 0.15])
+    
+    with col_lbl:
+        st.markdown(f"**{label_text}**")
+
+    with col_btn:
+        if st.button("❓", key=f"help_btn_{key_name}", help="Toggle help description"):
+            current = st.session_state.help_states[key_name]["visible"]
+            st.session_state.help_states[key_name] = {"visible": not current, "time": time.time()}
+            st.rerun()
+
+    if st.session_state.help_states[key_name]["visible"]:
+        st.sidebar.markdown(f"<div class='help-box'>💡 {description_text}</div>", unsafe_allow_html=True)
 
 # ==========================================
 # PROXY SCRAPER & HEALTH SCORING
@@ -272,14 +274,7 @@ def test_one(proxy_str):
         save_proxy_meta()
 
         return (proxy_str, True, latency, country, city)
-    except requests.exceptions.Timeout:
-        with proxy_lock:
-            if proxy_str not in proxy_meta:
-                proxy_meta[proxy_str] = {"fails": 0, "success": 0, "country": "US", "region": "Unknown"}
-            proxy_meta[proxy_str]["fails"] = proxy_meta[proxy_str].get("fails", 0) + 1
-        save_proxy_meta()
-        return (proxy_str, False, 0, "-", "-")
-    except Exception as e:
+    except Exception:
         with proxy_lock:
             if proxy_str not in proxy_meta:
                 proxy_meta[proxy_str] = {"fails": 0, "success": 0, "country": "US", "region": "Unknown"}
@@ -313,12 +308,10 @@ def load_webshare(api_key):
                 if not data.get("next"):
                     break
                 page += 1
-            except requests.exceptions.RequestException as req_err:
-                print(f"Webshare request exception: {req_err}")
+            except requests.exceptions.RequestException:
                 break
         return out
-    except Exception as e:
-        print(f"Webshare general exception: {e}")
+    except Exception:
         return out
 
 # ==========================================
@@ -326,6 +319,13 @@ def load_webshare(api_key):
 # ==========================================
 st.sidebar.title("🎛️ Control Panel")
 
+# Reset to Default Configuration Button
+if st.sidebar.button("🔄 Reset Config to Default", use_container_width=True):
+    st.session_state.BROWSER_CFG = DEFAULT_BROWSER_CFG.copy()
+    st.sidebar.success("Settings restored to optimal defaults!")
+    st.rerun()
+
+st.sidebar.markdown("---")
 instant_help_public("h_speed", "Select automated timing profile preset.", "Speed Mode Preset:")
 speed_mode = st.sidebar.selectbox("Speed Mode Preset Selector", ["slow", "normal", "fast", "superfast"], index=1, key="sb_speed", label_visibility="collapsed")
 
@@ -558,7 +558,7 @@ with tab_engine:
     email_provider = st.selectbox(
         "Provider select",
         [
-            "Microsoft (Outlook / Hotmail / Live)", 
+            "Microsoft (Outlook / Hotmail / Live / MSN)", 
             "Google (Gmail)", 
             "Yahoo Mail", 
             "AOL Mail", 
@@ -577,7 +577,7 @@ with tab_engine:
     accounts_raw = st.text_area(
         "Accounts text area",
         height=140,
-        placeholder="account1@outlook.com:Pass123!\naccount2@gmail.com:Secret456!",
+        placeholder="account1@outlook.com:Pass123!\naccount2@msn.com:Secret456!",
         key="eng_accounts",
         label_visibility="collapsed"
     )
