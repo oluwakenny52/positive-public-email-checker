@@ -29,7 +29,7 @@ if "running" not in st.session_state:
 if "proxy_stats" not in st.session_state:
     st.session_state.proxy_stats = {"total": 0, "alive": 0, "dead": 0, "countries": {}}
 
-# Initialize Help Toggle States with Timestamps for 10s auto-clear (Sidebar & Main Tab)
+# Initialize Help Toggle States with Timestamps for 10s auto-clear
 for help_key in [
     "h_speed", "h_timeout", "h_maxacc", "h_delay", "h_fail", "h_ok", 
     "h_type", "h_pagewait", "h_tries", "h_score", "h_proxmode", "h_poolmode",
@@ -224,12 +224,12 @@ def load_webshare(api_key):
 # ==========================================
 st.sidebar.title("🎛️ Control Panel (Cell 5A)")
 
-# Speed Preset Row with [ ? ]
+# Speed Preset Row with Help Button Above Slider
+st.sidebar.markdown("Speed Mode Preset:")
 c_sp1, c_sp2 = st.sidebar.columns([4, 1])
 with c_sp1:
-    speed_mode = st.selectbox("Speed Mode Preset", ["slow", "normal", "fast", "superfast"], index=1, key="sb_speed")
+    speed_mode = st.selectbox("Speed Mode Preset Selector", ["slow", "normal", "fast", "superfast"], index=1, key="sb_speed", label_visibility="collapsed")
 with c_sp2:
-    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("❓", key="btn_h_speed"):
         toggle_help("h_speed")
 render_help("h_speed", "Select automated timing profile preset (slow = safest, superfast = maximum speed risk).")
@@ -302,82 +302,82 @@ st.sidebar.subheader("⚙️ Timing & Rest Parameters")
 cfg = st.session_state.BROWSER_CFG
 
 # Timeout Row
+st.sidebar.markdown("Timeout (s):")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["BROWSER_TIMEOUT"] = st.slider("Timeout (s)", 20, 120, cfg["BROWSER_TIMEOUT"], 5, key="sb_timeout")
+    cfg["BROWSER_TIMEOUT"] = st.sidebar.slider("Timeout slider", 20, 120, cfg["BROWSER_TIMEOUT"], 5, key="sb_timeout", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_timeout"):
+    if st.sidebar.button("❓", key="btn_h_timeout"):
         toggle_help("h_timeout")
-render_help("h_timeout", "Max seconds allowed for one page load step before timeout triggers.")
+render_help("h_timeout", "Socket communication threshold for server responses[span_2](start_span)[span_2](end_span).")
 
 # Max Accounts Row
+st.sidebar.markdown("Max Accounts:")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["MAX_ACCOUNTS"] = st.slider("Max Accounts", 0, 10000, cfg["MAX_ACCOUNTS"], 100, key="sb_maxacc")
+    cfg["MAX_ACCOUNTS"] = st.sidebar.slider("Max accounts slider", 0, 10000, cfg["MAX_ACCOUNTS"], 100, key="sb_maxacc", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_maxacc"):
+    if st.sidebar.button("❓", key="btn_h_maxacc"):
         toggle_help("h_maxacc")
 render_help("h_maxacc", "0 = process all accounts in pool. N = limit execution to first N accounts.")
 
 # Delay Row
+st.sidebar.markdown("Delay / Account (s):")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["DELAY_BETWEEN_ACCOUNTS"] = st.slider("Delay / Account (s)", 15, 180, cfg["DELAY_BETWEEN_ACCOUNTS"], 5, key="sb_delay")
+    cfg["DELAY_BETWEEN_ACCOUNTS"] = st.sidebar.slider("Delay slider", 15, 180, cfg["DELAY_BETWEEN_ACCOUNTS"], 5, key="sb_delay", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_delay"):
+    if st.sidebar.button("❓", key="btn_h_delay"):
         toggle_help("h_delay")
 render_help("h_delay", "Baseline sleep time between account requests to avoid security flags.")
 
 # Rest Fail Row
+st.sidebar.markdown("Rest Fail (s):")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["REST_AFTER_FAIL"] = st.slider("Rest Fail (s)", 30, 300, cfg["REST_AFTER_FAIL"], 15, key="sb_fail")
+    cfg["REST_AFTER_FAIL"] = st.sidebar.slider("Rest fail slider", 30, 300, cfg["REST_AFTER_FAIL"], 15, key="sb_fail", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_fail"):
+    if st.sidebar.button("❓", key="btn_h_fail"):
         toggle_help("h_fail")
 render_help("h_fail", "Extended cool-down wait after an account login failure or rate limit.")
 
 # Rest OK Row
+st.sidebar.markdown("Rest OK (s):")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["REST_AFTER_SUCCESS"] = st.slider("Rest OK (s)", 15, 180, cfg["REST_AFTER_SUCCESS"], 5, key="sb_ok")
+    cfg["REST_AFTER_SUCCESS"] = st.sidebar.slider("Rest ok slider", 15, 180, cfg["REST_AFTER_SUCCESS"], 5, key="sb_ok", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_ok"):
+    if st.sidebar.button("❓", key="btn_h_ok"):
         toggle_help("h_ok")
 render_help("h_ok", "Cool-down period following a successful session validation.")
 
 # Typing Speed Row
+st.sidebar.markdown("Typing Speed (ms):")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["TYPING_MS"] = st.slider("Typing Speed (ms)", 40, 200, cfg["TYPING_MS"], 10, key="sb_type")
+    cfg["TYPING_MS"] = st.sidebar.slider("Typing slider", 40, 200, cfg["TYPING_MS"], 10, key="sb_type", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_type"):
+    if st.sidebar.button("❓", key="btn_h_type"):
         toggle_help("h_type")
 render_help("h_type", "Delay interval between keystrokes to mimic human behavior.")
 
 # Page Wait Row
+st.sidebar.markdown("Page Wait (s):")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["PAGE_WAIT_S"] = st.slider("Page Wait (s)", 1, 10, cfg["PAGE_WAIT_S"], 1, key="sb_pagewait")
+    cfg["PAGE_WAIT_S"] = st.sidebar.slider("Page wait slider", 1, 10, cfg["PAGE_WAIT_S"], 1, key="sb_pagewait", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_pagewait"):
+    if st.sidebar.button("❓", key="btn_h_pagewait"):
         toggle_help("h_pagewait")
 render_help("h_pagewait", "Buffer seconds after DOM load before inspecting interactive elements.")
 
 # Max Tries Row
+st.sidebar.markdown("Max Tries / Account:")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["MAX_TRIES_PER_ACCOUNT"] = st.slider("Max Tries / Account", 1, 5, cfg["MAX_TRIES_PER_ACCOUNT"], 1, key="sb_tries")
+    cfg["MAX_TRIES_PER_ACCOUNT"] = st.sidebar.slider("Max tries slider", 1, 5, cfg["MAX_TRIES_PER_ACCOUNT"], 1, key="sb_tries", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_tries"):
+    if st.sidebar.button("❓", key="btn_h_tries"):
         toggle_help("h_tries")
 render_help("h_tries", "Maximum fallback proxy retry attempts per account.")
 
@@ -385,52 +385,52 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("🛡️ Proxy Pool & Routing")
 
 # Min Score Row
+st.sidebar.markdown("Min Proxy Score:")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["MIN_PROXY_SCORE"] = st.slider("Min Proxy Score", 0, 100, cfg["MIN_PROXY_SCORE"], 5, key="sb_score")
+    cfg["MIN_PROXY_SCORE"] = st.sidebar.slider("Min score slider", 0, 100, cfg["MIN_PROXY_SCORE"], 5, key="sb_score", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_score"):
+    if st.sidebar.button("❓", key="btn_h_score"):
         toggle_help("h_score")
 render_help("h_score", "Filter threshold: only use nodes meeting this performance health score.")
 
 # Proxy Mode Row
+st.sidebar.markdown("Proxy Mode:")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["PROXY_MODE"] = st.selectbox("Proxy Mode", ["off", "rotate", "sticky", "fallback", "aggressive"], index=3, key="sb_proxmode")
+    cfg["PROXY_MODE"] = st.sidebar.selectbox("Proxy mode select", ["off", "rotate", "sticky", "fallback", "aggressive"], index=3, key="sb_proxmode", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_proxmode"):
+    if st.sidebar.button("❓", key="btn_h_proxmode"):
         toggle_help("h_proxmode")
 render_help("h_proxmode", "off | rotate | sticky | fallback | aggressive node switching.")
 
 # Pool Mode Row
+st.sidebar.markdown("Pool Mode:")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["POOL_MODE"] = st.selectbox("Pool Mode", ["us_only", "all", "country", "mix"], index=0, key="sb_poolmode")
+    cfg["POOL_MODE"] = st.sidebar.selectbox("Pool mode select", ["us_only", "all", "country", "mix"], index=0, key="sb_poolmode", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_poolmode"):
+    if st.sidebar.button("❓", key="btn_h_poolmode"):
         toggle_help("h_poolmode")
 render_help("h_poolmode", "Geographic filtering profile for the active proxy pool.")
 
 # Pool Country Row
+st.sidebar.markdown("Pool Country Code:")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["POOL_COUNTRY"] = st.text_input("Pool Country Code", cfg["POOL_COUNTRY"], key="sb_country")
+    cfg["POOL_COUNTRY"] = st.sidebar.text_input("Pool country text", cfg["POOL_COUNTRY"], key="sb_country", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_country"):
+    if st.sidebar.button("❓", key="btn_h_country"):
         toggle_help("h_country")
 render_help("h_country", "Target ISO country code when pool mode is set to country.")
 
 # Pool Mix Row
+st.sidebar.markdown("Pool Mix List:")
 c1, c2 = st.sidebar.columns([4, 1])
 with c1:
-    cfg["POOL_MIX"] = st.text_input("Pool Mix List", cfg["POOL_MIX"], key="sb_mix")
+    cfg["POOL_MIX"] = st.sidebar.text_input("Pool mix text", cfg["POOL_MIX"], key="sb_mix", label_visibility="collapsed")
 with c2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("❓", key="btn_h_mix"):
+    if st.sidebar.button("❓", key="btn_h_mix"):
         toggle_help("h_mix")
 render_help("h_mix", "Comma-separated country list for multi-region rotation.")
 
@@ -442,7 +442,7 @@ c1, c2 = st.sidebar.columns([4, 1])
 with c1:
     cfg["DEBUG"] = st.sidebar.checkbox("Debug Mode", value=cfg["DEBUG"], key="sb_debug")
 with c2:
-    if st.button("❓", key="btn_h_debug"):
+    if st.sidebar.button("❓", key="btn_h_debug"):
         toggle_help("h_debug")
 render_help("h_debug", "Enable verbose step logging and diagnostic artifact tracing.")
 
@@ -451,7 +451,7 @@ c1, c2 = st.sidebar.columns([4, 1])
 with c1:
     cfg["FIRE_UP"] = st.sidebar.checkbox("Fire-up (Clear Cookies/State)", value=cfg["FIRE_UP"], key="sb_fire")
 with c2:
-    if st.button("❓", key="btn_h_fire"):
+    if st.sidebar.button("❓", key="btn_h_fire"):
         toggle_help("h_fire")
 render_help("h_fire", "ON = purge browser profile after each account. OFF = retain state for remote inspection.")
 
@@ -460,7 +460,7 @@ c1, c2 = st.sidebar.columns([4, 1])
 with c1:
     cfg["USE_PROXIES"] = st.sidebar.checkbox("Use Proxies", value=cfg["USE_PROXIES"], key="sb_useproxy")
 with c2:
-    if st.button("❓", key="btn_h_useproxy"):
+    if st.sidebar.button("❓", key="btn_h_useproxy"):
         toggle_help("h_useproxy")
 render_help("h_useproxy", "Master switch enabling proxy route tunnels.")
 
@@ -469,7 +469,7 @@ c1, c2 = st.sidebar.columns([4, 1])
 with c1:
     cfg["STEALTH"] = st.sidebar.checkbox("Stealth Mode", value=cfg["STEALTH"], key="sb_stealth")
 with c2:
-    if st.button("❓", key="btn_h_stealth"):
+    if st.sidebar.button("❓", key="btn_h_stealth"):
         toggle_help("h_stealth")
 render_help("h_stealth", "Mask navigator fingerprints and webdriver signatures.")
 
@@ -478,7 +478,7 @@ c1, c2 = st.sidebar.columns([4, 1])
 with c1:
     cfg["WARMUP"] = st.sidebar.checkbox("Warm-up Browser", value=cfg["WARMUP"], key="sb_warm")
 with c2:
-    if st.button("❓", key="btn_h_warm"):
+    if st.sidebar.button("❓", key="btn_h_warm"):
         toggle_help("h_warm")
 render_help("h_warm", "Navigate to benign landing pages before hitting auth endpoints.")
 
@@ -487,7 +487,7 @@ c1, c2 = st.sidebar.columns([4, 1])
 with c1:
     cfg["FORCE_EN_US"] = st.sidebar.checkbox("Force English UI (en-US)", value=cfg["FORCE_EN_US"], key="sb_forceen")
 with c2:
-    if st.button("❓", key="btn_h_forceen"):
+    if st.sidebar.button("❓", key="btn_h_forceen"):
         toggle_help("h_forceen")
 render_help("h_forceen", "Enforce english locale headers.")
 
@@ -496,7 +496,7 @@ c1, c2 = st.sidebar.columns([4, 1])
 with c1:
     cfg["SCREENSHOT_FINAL"] = st.sidebar.checkbox("Save Failure Screenshots", value=cfg["SCREENSHOT_FINAL"], key="sb_shot")
 with c2:
-    if st.button("❓", key="btn_h_shot"):
+    if st.sidebar.button("❓", key="btn_h_shot"):
         toggle_help("h_shot")
 render_help("h_shot", "Dump PNG debug snapshots upon encounter errors.")
 
@@ -505,7 +505,7 @@ c1, c2 = st.sidebar.columns([4, 1])
 with c1:
     cfg["WEBAUTHN_OFF"] = st.sidebar.checkbox("WebAuthn / Passkeys OFF", value=cfg["WEBAUTHN_OFF"], key="sb_webauthn")
 with c2:
-    if st.button("❓", key="btn_h_webauthn"):
+    if st.sidebar.button("❓", key="btn_h_webauthn"):
         toggle_help("h_webauthn")
 render_help("h_webauthn", "Disable hardware security key prompts.")
 
@@ -514,7 +514,7 @@ c1, c2 = st.sidebar.columns([4, 1])
 with c1:
     cfg["RETRY_CF"] = st.sidebar.checkbox("Retry Cloudflare Challenge", value=cfg["RETRY_CF"], key="sb_retrycf")
 with c2:
-    if st.button("❓", key="btn_h_retrycf"):
+    if st.sidebar.button("❓", key="btn_h_retrycf"):
         toggle_help("h_retrycf")
 render_help("h_retrycf", "Automatically attempt challenge bypass loops.")
 
@@ -543,10 +543,11 @@ with tab_engine:
     st.subheader("Batch Account & Provider Processor")
     
     # Provider Row with [ ? ]
+    st.markdown("Select Public Email Provider:")
     c_prov1, c_prov2 = st.columns([19, 1])
     with c_prov1:
         email_provider = st.selectbox(
-            "Select Public Email Provider",
+            "Provider select",
             [
                 "Microsoft (Outlook / Hotmail / Live)", 
                 "Google (Gmail)", 
@@ -556,35 +557,36 @@ with tab_engine:
                 "Proton Mail", 
                 "Custom IMAP Endpoint"
             ],
-            key="eng_provider"
+            key="eng_provider",
+            label_visibility="collapsed"
         )
     with c_prov2:
-        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("❓", key="btn_h_provider"):
             toggle_help("h_provider")
     render_help("h_provider", "Select target mail ecosystem router for automated login and validation.")
 
     # Threads Row with [ ? ]
+    st.markdown("Concurrent Threads:")
     c_thr1, c_thr2 = st.columns([19, 1])
     with c_thr1:
-        max_threads = st.number_input("Concurrent Threads", min_value=1, max_value=10, value=3, key="eng_threads")
+        max_threads = st.number_input("Threads input", min_value=1, max_value=10, value=3, key="eng_threads", label_visibility="collapsed")
     with c_thr2:
-        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("❓", key="btn_h_threads"):
             toggle_help("h_threads")
-    render_help("h_threads", "Configure simultaneous browser/session processing pipelines.")
+    render_help("h_threads", "Initial number of concurrent worker threads spawned to validate incoming accounts[span_3](start_span)[span_3](end_span).")
 
     # Accounts Pool Row with [ ? ]
+    st.markdown("Accounts Pool (email:password format, one per line):")
     c_acc1, c_acc2 = st.columns([19, 1])
     with c_acc1:
         accounts_raw = st.text_area(
-            "Accounts Pool (email:password format, one per line)",
+            "Accounts text area",
             height=140,
             placeholder="account1@outlook.com:Pass123!\naccount2@gmail.com:Secret456!",
-            key="eng_accounts"
+            key="eng_accounts",
+            label_visibility="collapsed"
         )
     with c_acc2:
-        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("❓", key="btn_h_accounts"):
             toggle_help("h_accounts")
     render_help("h_accounts", "Input target email accounts and passwords separated by colon, one pair per line.")
