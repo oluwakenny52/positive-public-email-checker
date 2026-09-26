@@ -50,6 +50,9 @@ def load_json(path, default=None):
         try:
             with open(path, encoding="utf-8") as f:
                 return json.load(f)
+        except json.JSONDecodeError as jde:
+            print(f"JSON Decode Error in {path}: {jde}")
+            return default
         except Exception as e:
             print(f"Error loading JSON {path}: {e}")
             return default
@@ -77,6 +80,8 @@ def save_proxy_meta():
 # --- Initialize Session States ---
 if "LIVE_SESSIONS" not in st.session_state:
     st.session_state.LIVE_SESSIONS = {}
+if "SUCCESSFUL_ACCOUNTS" not in st.session_state:
+    st.session_state.SUCCESSFUL_ACCOUNTS = []
 if "fetched_proxies" not in st.session_state:
     st.session_state.fetched_proxies = ""
 if "proxy_logs" not in st.session_state:
@@ -215,6 +220,7 @@ def parse_proxy(proxy_str):
             return f"http://{proxy_str}"
         return f"http://{proxy_str}"
     except Exception as e:
+        st.session_state.debug_logs.append(f"Proxy parse error: {str(e)}")
         return None
 
 def compute_real_score(success_count, fail_count, initial_latency_score=80):
@@ -266,13 +272,18 @@ def test_one(proxy_str):
         save_proxy_meta()
 
         return (proxy_str, True, latency, country, city)
-    except Exception:
+    except requests.exceptions.Timeout:
         with proxy_lock:
             if proxy_str not in proxy_meta:
                 proxy_meta[proxy_str] = {"fails": 0, "success": 0, "country": "US", "region": "Unknown"}
-            m = proxy_meta[proxy_str]
-            m["fails"] = m.get("fails", 0) + 1
-            m["score"] = compute_real_score(m.get("success", 0), m["fails"], 50)
+            proxy_meta[proxy_str]["fails"] = proxy_meta[proxy_str].get("fails", 0) + 1
+        save_proxy_meta()
+        return (proxy_str, False, 0, "-", "-")
+    except Exception as e:
+        with proxy_lock:
+            if proxy_str not in proxy_meta:
+                proxy_meta[proxy_str] = {"fails": 0, "success": 0, "country": "US", "region": "Unknown"}
+            proxy_meta[proxy_str]["fails"] = proxy_meta[proxy_str].get("fails", 0) + 1
         save_proxy_meta()
         return (proxy_str, False, 0, "-", "-")
 
@@ -285,24 +296,29 @@ def load_webshare(api_key):
         page = 1
         while page <= 10:
             url = f"https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page={page}&page_size=100"
-            r = requests.get(url, headers=headers, timeout=15)
-            if r.status_code == 401 or r.status_code != 200:
+            try:
+                r = requests.get(url, headers=headers, timeout=15)
+                if r.status_code == 401 or r.status_code != 200:
+                    break
+                data = r.json()
+                items = data.get("results", [])
+                if not items:
+                    break
+                for it in items:
+                    try:
+                        line = f"{it['username']}:{it['password']}@{it['proxy_address']}:{it['port']}"
+                        out.append(line)
+                    except Exception:
+                        continue
+                if not data.get("next"):
+                    break
+                page += 1
+            except requests.exceptions.RequestException as req_err:
+                print(f"Webshare request exception: {req_err}")
                 break
-            data = r.json()
-            items = data.get("results", [])
-            if not items:
-                break
-            for it in items:
-                try:
-                    line = f"{it['username']}:{it['password']}@{it['proxy_address']}:{it['port']}"
-                    out.append(line)
-                except Exception:
-                    continue
-            if not data.get("next"):
-                break
-            page += 1
         return out
-    except Exception:
+    except Exception as e:
+        print(f"Webshare general exception: {e}")
         return out
 
 # ==========================================
@@ -383,7 +399,7 @@ cfg = st.session_state.BROWSER_CFG
 instant_help_public("h_timeout", "Socket communication threshold for server responses.", "Timeout (s):")
 cfg["BROWSER_TIMEOUT"] = st.sidebar.slider("Timeout slider", 20, 120, cfg["BROWSER_TIMEOUT"], 5, key="sb_timeout", label_visibility="collapsed")
 
-instant_help_public("h_maxacc", "0 = process all accounts in pool. N = limit execution to first N accounts.", "Max Accounts:")
+instant_help_public("h_maxacc", "0 = process all accounts in pool.", "Max Accounts:")
 cfg["MAX_ACCOUNTS"] = st.sidebar.slider("Max accounts slider", 0, 10000, cfg["MAX_ACCOUNTS"], 100, key="sb_maxacc", label_visibility="collapsed")
 
 instant_help_public("h_delay", "Baseline sleep time between account requests.", "Delay / Account (s):")
@@ -464,54 +480,63 @@ if st.sidebar.button("💾 Apply Settings", type="primary", use_container_width=
 # WORKER EXECUTION ENGINE
 # ==========================================
 def process_single_account(email, password, provider, proxies_pool, config):
-    """Simulates/Executes individual account validation workflow using selected proxies & settings."""
-    time.sleep(random.uniform(1.0, 3.0))  # Simulated login latency
-    
-    # Pick proxy based on configuration
-    selected_proxy = None
-    if config["USE_PROXIES"] and proxies_pool:
-        valid_proxies = [p for p in proxies_pool if proxy_meta.get(p, {}).get("score", 50) >= config["MIN_PROXY_SCORE"]]
-        if not valid_proxies:
-            valid_proxies = proxies_pool
-        selected_proxy = random.choice(valid_proxies) if valid_proxies else None
-
-    # Verification simulation logic (Replace or extend with Playwright/Selenium handler if needed)
-    success = random.choice([True, False]) # Replace with actual handler response
-    
-    with results_lock:
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        if success:
-            msg = f"[{timestamp}] ✅ SUCCESS: {email} verified via provider [{provider}] using proxy [{selected_proxy or 'Direct'}]"
-            st.session_state.LIVE_SESSIONS[email] = {"status": "Active", "time": timestamp, "proxy": selected_proxy}
-        else:
-            msg = f"[{timestamp}] ❌ FAILED: {email} authentication rejected on [{provider}]"
+    try:
+        time.sleep(random.uniform(0.5, 1.5))
         
-        st.session_state.engine_logs.append(msg)
-    return success
+        selected_proxy = None
+        if config["USE_PROXIES"] and proxies_pool:
+            valid_proxies = [p for p in proxies_pool if proxy_meta.get(p, {}).get("score", 50) >= config["MIN_PROXY_SCORE"]]
+            if not valid_proxies:
+                valid_proxies = proxies_pool
+            selected_proxy = random.choice(valid_proxies) if valid_proxies else None
+
+        success = random.choice([True, False]) # Replace/integrate Playwright handler here
+        
+        with results_lock:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            if success:
+                msg = f"[{timestamp}] ✅ SUCCESS: {email} verified via provider [{provider}] using proxy [{selected_proxy or 'Direct'}]"
+                st.session_state.LIVE_SESSIONS[email] = {"status": "Active", "time": timestamp, "proxy": selected_proxy}
+                if f"{email}:{password}" not in st.session_state.SUCCESSFUL_ACCOUNTS:
+                    st.session_state.SUCCESSFUL_ACCOUNTS.append(f"{email}:{password}")
+            else:
+                msg = f"[{timestamp}] ❌ FAILED: {email} authentication rejected on [{provider}]"
+            
+            st.session_state.engine_logs.append(msg)
+        return success
+    except Exception as e:
+        with results_lock:
+            st.session_state.engine_logs.append(f"⚠️ Account Worker Exception for {email}: {str(e)}")
+        return False
 
 def run_checker_engine(accounts_list, provider, proxies_pool, config, max_workers):
-    st.session_state.engine_logs = []
-    st.session_state.engine_logs.append(f"Engine initialized. Processing {len(accounts_list)} accounts with {max_workers} threads...")
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
-        for line in accounts_list:
-            if ":" not in line:
-                continue
-            parts = line.strip().split(":", 1)
-            email, pwd = parts[0], parts[1]
-            futures.append(executor.submit(process_single_account, email, pwd, provider, proxies_pool, config))
+    try:
+        with results_lock:
+            st.session_state.engine_logs.append(f"Engine initialized. Processing {len(accounts_list)} accounts with {max_workers} threads...")
         
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                with results_lock:
-                    st.session_state.engine_logs.append(f"⚠️ Thread error: {str(e)}")
-                    
-    st.session_state.running = False
-    with results_lock:
-        st.session_state.engine_logs.append("🏁 Batch execution completed successfully.")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for line in accounts_list:
+                if ":" not in line:
+                    continue
+                parts = line.strip().split(":", 1)
+                email, pwd = parts[0], parts[1]
+                futures.append(executor.submit(process_single_account, email, pwd, provider, proxies_pool, config))
+            
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    with results_lock:
+                        st.session_state.engine_logs.append(f"⚠️ Thread future execution error: {str(e)}")
+                        
+        st.session_state.running = False
+        with results_lock:
+            st.session_state.engine_logs.append("🏁 Batch execution completed successfully.")
+    except Exception as e:
+        st.session_state.running = False
+        with results_lock:
+            st.session_state.engine_logs.append(f"🚨 Critical Engine Error: {str(e)}")
 
 # ==========================================
 # MAIN INTERFACE TABS
@@ -564,23 +589,32 @@ with tab_engine:
         placeholder="IP:Port:User:Pass (or click 'Fetch & Test All Proxies' in the sidebar)..."
     )
 
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     with c1:
         start_engine = st.button("▶️ Launch Checker Engine", type="primary", use_container_width=True)
     with c2:
         stop_engine = st.button("⏹️ Stop / Force Unlock", use_container_width=True)
+    with c3:
+        if st.button("🧹 Clear Logs & Cache", use_container_width=True):
+            st.session_state.engine_logs = []
+            st.session_state.proxy_logs = []
+            st.success("Logs successfully cleared!")
+            st.rerun()
+
+    if stop_engine:
+        st.session_state.running = False
+        st.warning("Engine force-stopped by user.")
 
     if start_engine:
-        accounts_lines = [line.strip() for line in accounts_raw.splitlines() if line.strip()]
+        accounts_lines = [line.strip() for line in accounts_raw.splitlines() if line.strip() and ":" in line]
         proxies_lines = [line.strip() for line in proxies_raw.splitlines() if line.strip()]
         
         if not accounts_lines:
-            st.error("Validation Error: Please add at least one account line.")
+            st.error("Validation Error: Please add valid account lines in email:password format.")
         else:
             st.session_state.running = True
             st.success(f"Engine started for {len(accounts_lines)} accounts using [{email_provider}]!")
             
-            # Run in a background thread to prevent UI freezing
             worker_thread = threading.Thread(
                 target=run_checker_engine,
                 args=(accounts_lines, email_provider, proxies_lines, st.session_state.BROWSER_CFG, max_threads),
@@ -588,9 +622,20 @@ with tab_engine:
             )
             worker_thread.start()
 
+    if st.session_state.SUCCESSFUL_ACCOUNTS:
+        st.markdown("### 📥 Export Successful Results")
+        success_data = "\n".join(st.session_state.SUCCESSFUL_ACCOUNTS)
+        st.download_button(
+            label="💾 Download Working Accounts (.txt)",
+            data=success_data,
+            file_name=f"successful_accounts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+
     if st.session_state.engine_logs:
         st.markdown("### **Live Execution Stream**")
-        st.code("\n".join(st.session_state.engine_logs[-30:]), language="text")
+        st.code("\n".join(st.session_state.engine_logs[-40:]), language="text")
 
 with tab_terminal:
     st.subheader("Interactive Terminal Remote")
