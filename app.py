@@ -29,6 +29,33 @@ if "running" not in st.session_state:
 if "proxy_stats" not in st.session_state:
     st.session_state.proxy_stats = {"total": 0, "alive": 0, "dead": 0, "countries": {}}
 
+# Initialize Help Toggle States with Timestamps for 10s auto-clear
+for help_key in [
+    "h_speed", "h_timeout", "h_maxacc", "h_delay", "h_fail", "h_ok", 
+    "h_type", "h_pagewait", "h_tries", "h_score", "h_proxmode", "h_poolmode",
+    "h_country", "h_mix", "h_debug", "h_fire", "h_useproxy", "h_stealth",
+    "h_warm", "h_forceen", "h_shot", "h_webauthn", "h_retrycf"
+]:
+    if help_key not in st.session_state:
+        st.session_state[help_key] = {"active": False, "time": 0}
+
+def toggle_help(key):
+    now = time.time()
+    current = st.session_state[key]
+    if current["active"] and (now - current["time"] < 10):
+        st.session_state[key] = {"active": False, "time": 0}
+    else:
+        st.session_state[key] = {"active": True, "time": now}
+
+def render_help(key, text):
+    now = time.time()
+    state = st.session_state[key]
+    if state["active"]:
+        if now - state["time"] > 10:
+            st.session_state[key] = {"active": False, "time": 0}
+        else:
+            st.info(text)
+
 if "BROWSER_CFG" not in st.session_state:
     st.session_state.BROWSER_CFG = {
         "BROWSER_TIMEOUT": 45,
@@ -118,7 +145,6 @@ OXYLABS_PROXIES = [
 
 PROXY_TEST_TIMEOUT = 7
 MAX_TEST_WORKERS   = 12
-PROXY_FILE         = "proxies.txt"
 
 def parse_proxy(proxy_str):
     try:
@@ -158,10 +184,7 @@ def test_one(proxy_str):
         except Exception:
             pass
         return (proxy_str, True, latency, country, city)
-    except requests.exceptions.RequestException:
-        return (proxy_str, False, 0, "-", "-")
-    except Exception as e:
-        st.session_state.debug_logs.append(f"Test exception for {proxy_str}: {str(e)}")
+    except Exception:
         return (proxy_str, False, 0, "-", "-")
 
 def load_webshare(api_key):
@@ -174,7 +197,7 @@ def load_webshare(api_key):
         while page <= 10:
             url = f"https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page={page}&page_size=100"
             r = requests.get(url, headers=headers, timeout=15)
-            if r.status_code == 401:
+            if r.status_code in [401, 200] and r.status_code == 401:
                 break
             if r.status_code != 200:
                 break
@@ -192,8 +215,7 @@ def load_webshare(api_key):
                 break
             page += 1
         return out
-    except Exception as e:
-        st.session_state.debug_logs.append(f"Webshare fetch error: {str(e)}")
+    except Exception:
         return out
 
 # ==========================================
@@ -201,12 +223,16 @@ def load_webshare(api_key):
 # ==========================================
 st.sidebar.title("🎛️ Control Panel (Cell 5A)")
 
-speed_mode = st.sidebar.selectbox(
-    "Speed Mode Preset", 
-    ["slow", "normal", "fast", "superfast"], 
-    index=1,
-    help="Select automated timing preset profiles."
-)
+# Speed Preset Row with [ ? ]
+c_sp1, c_sp2 = st.sidebar.columns([4, 1])
+with c_sp1:
+    speed_mode = st.selectbox("Speed Mode Preset", ["slow", "normal", "fast", "superfast"], index=1, key="sb_speed")
+with c_sp2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_speed"):
+        toggle_help("h_speed")
+render_help("h_speed", "Select automated timing profile preset (slow = safest, superfast = maximum speed risk).")
+
 if st.sidebar.button("⚡ Apply Mode Preset", use_container_width=True):
     try:
         preset = MODE_PRESETS[speed_mode]
@@ -274,76 +300,222 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("⚙️ Timing & Rest Parameters")
 cfg = st.session_state.BROWSER_CFG
 
-cfg["BROWSER_TIMEOUT"] = st.sidebar.slider(
-    "Timeout (s)", 20, 120, cfg["BROWSER_TIMEOUT"], 5,
-    help="Max seconds for one page load step before timeout triggers."
-)
+# Timeout Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["BROWSER_TIMEOUT"] = st.slider("Timeout (s)", 20, 120, cfg["BROWSER_TIMEOUT"], 5, key="sb_timeout")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_timeout"):
+        toggle_help("h_timeout")
+render_help("h_timeout", "Max seconds allowed for one page load step before timeout triggers.")
 
-cfg["MAX_ACCOUNTS"] = st.sidebar.slider(
-    "Max Accounts", 0, 10000, cfg["MAX_ACCOUNTS"], 100,
-    help="0 = process all accounts in pool. N = limit execution to first N accounts."
-)
+# Max Accounts Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["MAX_ACCOUNTS"] = st.slider("Max Accounts", 0, 10000, cfg["MAX_ACCOUNTS"], 100, key="sb_maxacc")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_maxacc"):
+        toggle_help("h_maxacc")
+render_help("h_maxacc", "0 = process all accounts in pool. N = limit execution to first N accounts.")
 
-cfg["DELAY_BETWEEN_ACCOUNTS"] = st.sidebar.slider(
-    "Delay / Account (s)", 15, 180, cfg["DELAY_BETWEEN_ACCOUNTS"], 5,
-    help="Baseline sleep time between account requests to avoid flagging."
-)
+# Delay Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["DELAY_BETWEEN_ACCOUNTS"] = st.slider("Delay / Account (s)", 15, 180, cfg["DELAY_BETWEEN_ACCOUNTS"], 5, key="sb_delay")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_delay"):
+        toggle_help("h_delay")
+render_help("h_delay", "Baseline sleep time between account requests to avoid security flags.")
 
-cfg["REST_AFTER_FAIL"] = st.sidebar.slider(
-    "Rest Fail (s)", 30, 300, cfg["REST_AFTER_FAIL"], 15,
-    help="Extended cool-down wait after an account login failure or rate limit."
-)
+# Rest Fail Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["REST_AFTER_FAIL"] = st.slider("Rest Fail (s)", 30, 300, cfg["REST_AFTER_FAIL"], 15, key="sb_fail")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_fail"):
+        toggle_help("h_fail")
+render_help("h_fail", "Extended cool-down wait after an account login failure or rate limit.")
 
-cfg["REST_AFTER_SUCCESS"] = st.sidebar.slider(
-    "Rest OK (s)", 15, 180, cfg["REST_AFTER_SUCCESS"], 5,
-    help="Cool-down period following a successful session validation."
-)
+# Rest OK Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["REST_AFTER_SUCCESS"] = st.slider("Rest OK (s)", 15, 180, cfg["REST_AFTER_SUCCESS"], 5, key="sb_ok")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_ok"):
+        toggle_help("h_ok")
+render_help("h_ok", "Cool-down period following a successful session validation.")
 
-cfg["TYPING_MS"] = st.sidebar.slider(
-    "Typing Speed (ms)", 40, 200, cfg["TYPING_MS"], 10,
-    help="Delay interval between keystrokes to mimic human behavior."
-)
+# Typing Speed Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["TYPING_MS"] = st.slider("Typing Speed (ms)", 40, 200, cfg["TYPING_MS"], 10, key="sb_type")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_type"):
+        toggle_help("h_type")
+render_help("h_type", "Delay interval between keystrokes to mimic human behavior.")
 
-cfg["PAGE_WAIT_S"] = st.sidebar.slider(
-    "Page Wait (s)", 1, 10, cfg["PAGE_WAIT_S"], 1,
-    help="Buffer seconds after DOM load before inspecting interactive elements."
-)
+# Page Wait Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["PAGE_WAIT_S"] = st.slider("Page Wait (s)", 1, 10, cfg["PAGE_WAIT_S"], 1, key="sb_pagewait")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_pagewait"):
+        toggle_help("h_pagewait")
+render_help("h_pagewait", "Buffer seconds after DOM load before inspecting interactive elements.")
 
-cfg["MAX_TRIES_PER_ACCOUNT"] = st.sidebar.slider(
-    "Max Tries / Account", 1, 5, cfg["MAX_TRIES_PER_ACCOUNT"], 1,
-    help="Maximum fallback proxy retry attempts per account."
-)
+# Max Tries Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["MAX_TRIES_PER_ACCOUNT"] = st.slider("Max Tries / Account", 1, 5, cfg["MAX_TRIES_PER_ACCOUNT"], 1, key="sb_tries")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_tries"):
+        toggle_help("h_tries")
+render_help("h_tries", "Maximum fallback proxy retry attempts per account.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🛡️ Proxy Pool & Routing")
-cfg["MIN_PROXY_SCORE"] = st.sidebar.slider(
-    "Min Proxy Score", 0, 100, cfg["MIN_PROXY_SCORE"], 5,
-    help="Filter threshold: only use nodes meeting this health performance score."
-)
 
-cfg["PROXY_MODE"] = st.sidebar.selectbox(
-    "Proxy Mode", ["off", "rotate", "sticky", "fallback", "aggressive"], index=3,
-    help="off (direct) | rotate (new per account) | sticky (session pinned) | fallback (auto-switch on failure) | aggressive (rapid high-concurrency node rotation)."
-)
+# Min Score Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["MIN_PROXY_SCORE"] = st.slider("Min Proxy Score", 0, 100, cfg["MIN_PROXY_SCORE"], 5, key="sb_score")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_score"):
+        toggle_help("h_score")
+render_help("h_score", "Filter threshold: only use nodes meeting this performance health score.")
 
-cfg["POOL_MODE"] = st.sidebar.selectbox(
-    "Pool Mode", ["us_only", "all", "country", "mix"], index=0,
-    help="Geographic filtering profile for the active proxy pool."
-)
-cfg["POOL_COUNTRY"] = st.sidebar.text_input("Pool Country Code", cfg["POOL_COUNTRY"], help="Target ISO country code when pool mode is set to country.")
-cfg["POOL_MIX"] = st.sidebar.text_input("Pool Mix List", cfg["POOL_MIX"], help="Comma-separated country list for multi-region rotation.")
+# Proxy Mode Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["PROXY_MODE"] = st.selectbox("Proxy Mode", ["off", "rotate", "sticky", "fallback", "aggressive"], index=3, key="sb_proxmode")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_proxmode"):
+        toggle_help("h_proxmode")
+render_help("h_proxmode", "off | rotate | sticky | fallback | aggressive node switching.")
+
+# Pool Mode Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["POOL_MODE"] = st.selectbox("Pool Mode", ["us_only", "all", "country", "mix"], index=0, key="sb_poolmode")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_poolmode"):
+        toggle_help("h_poolmode")
+render_help("h_poolmode", "Geographic filtering profile for the active proxy pool.")
+
+# Pool Country Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["POOL_COUNTRY"] = st.text_input("Pool Country Code", cfg["POOL_COUNTRY"], key="sb_country")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_country"):
+        toggle_help("h_country")
+render_help("h_country", "Target ISO country code when pool mode is set to country.")
+
+# Pool Mix Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["POOL_MIX"] = st.text_input("Pool Mix List", cfg["POOL_MIX"], key="sb_mix")
+with c2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("❓", key="btn_h_mix"):
+        toggle_help("h_mix")
+render_help("h_mix", "Comma-separated country list for multi-region rotation.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔒 Advanced Flags & Anti-Bot")
-cfg["DEBUG"] = st.sidebar.checkbox("Debug Mode", value=cfg["DEBUG"], help="Enable verbose step logging and diagnostic artifact tracing.")
-cfg["FIRE_UP"] = st.sidebar.checkbox("Fire-up (Clear Cookies/State)", value=cfg["FIRE_UP"], help="ON = purge browser profile after each account. OFF = retain state for remote inspection.")
-cfg["USE_PROXIES"] = st.sidebar.checkbox("Use Proxies", value=cfg["USE_PROXIES"], help="Master switch enabling proxy route tunnels.")
-cfg["STEALTH"] = st.sidebar.checkbox("Stealth Mode", value=cfg["STEALTH"], help="Mask navigator fingerprints and webdriver signatures.")
-cfg["WARMUP"] = st.sidebar.checkbox("Warm-up Browser", value=cfg["WARMUP"], help="Navigate to benign landing pages before hitting auth endpoints.")
-cfg["FORCE_EN_US"] = st.sidebar.checkbox("Force English UI (en-US)", value=cfg["FORCE_EN_US"], help="Enforce english locale headers.")
-cfg["SCREENSHOT_FINAL"] = st.sidebar.checkbox("Save Failure Screenshots", value=cfg["SCREENSHOT_FINAL"], help="Dump PNG debug snapshots upon encounter errors.")
-cfg["WEBAUTHN_OFF"] = st.sidebar.checkbox("WebAuthn / Passkeys OFF", value=cfg["WEBAUTHN_OFF"], help="Disable hardware security key prompts.")
-cfg["RETRY_CF"] = st.sidebar.checkbox("Retry Cloudflare Challenge", value=cfg["RETRY_CF"], help="Automatically attempt challenge bypass loops.")
+
+# Debug Toggle Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["DEBUG"] = st.sidebar.checkbox("Debug Mode", value=cfg["DEBUG"], key="sb_debug")
+with c2:
+    if st.button("❓", key="btn_h_debug"):
+        toggle_help("h_debug")
+render_help("h_debug", "Enable verbose step logging and diagnostic artifact tracing.")
+
+# Fire-up Toggle Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["FIRE_UP"] = st.sidebar.checkbox("Fire-up (Clear Cookies/State)", value=cfg["FIRE_UP"], key="sb_fire")
+with c2:
+    if st.button("❓", key="btn_h_fire"):
+        toggle_help("h_fire")
+render_help("h_fire", "ON = purge browser profile after each account. OFF = retain state for remote inspection.")
+
+# Use Proxies Toggle Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["USE_PROXIES"] = st.sidebar.checkbox("Use Proxies", value=cfg["USE_PROXIES"], key="sb_useproxy")
+with c2:
+    if st.button("❓", key="btn_h_useproxy"):
+        toggle_help("h_useproxy")
+render_help("h_useproxy", "Master switch enabling proxy route tunnels.")
+
+# Stealth Toggle Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["STEALTH"] = st.sidebar.checkbox("Stealth Mode", value=cfg["STEALTH"], key="sb_stealth")
+with c2:
+    if st.button("❓", key="btn_h_stealth"):
+        toggle_help("h_stealth")
+render_help("h_stealth", "Mask navigator fingerprints and webdriver signatures.")
+
+# Warmup Toggle Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["WARMUP"] = st.sidebar.checkbox("Warm-up Browser", value=cfg["WARMUP"], key="sb_warm")
+with c2:
+    if st.button("❓", key="btn_h_warm"):
+        toggle_help("h_warm")
+render_help("h_warm", "Navigate to benign landing pages before hitting auth endpoints.")
+
+# Force EN Toggle Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["FORCE_EN_US"] = st.sidebar.checkbox("Force English UI (en-US)", value=cfg["FORCE_EN_US"], key="sb_forceen")
+with c2:
+    if st.button("❓", key="btn_h_forceen"):
+        toggle_help("h_forceen")
+render_help("h_forceen", "Enforce english locale headers.")
+
+# Screenshot Toggle Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["SCREENSHOT_FINAL"] = st.sidebar.checkbox("Save Failure Screenshots", value=cfg["SCREENSHOT_FINAL"], key="sb_shot")
+with c2:
+    if st.button("❓", key="btn_h_shot"):
+        toggle_help("h_shot")
+render_help("h_shot", "Dump PNG debug snapshots upon encounter errors.")
+
+# WebAuthn Toggle Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["WEBAUTHN_OFF"] = st.sidebar.checkbox("WebAuthn / Passkeys OFF", value=cfg["WEBAUTHN_OFF"], key="sb_webauthn")
+with c2:
+    if st.button("❓", key="btn_h_webauthn"):
+        toggle_help("h_webauthn")
+render_help("h_webauthn", "Disable hardware security key prompts.")
+
+# Retry CF Toggle Row
+c1, c2 = st.sidebar.columns([4, 1])
+with c1:
+    cfg["RETRY_CF"] = st.sidebar.checkbox("Retry Cloudflare Challenge", value=cfg["RETRY_CF"], key="sb_retrycf")
+with c2:
+    if st.button("❓", key="btn_h_retrycf"):
+        toggle_help("h_retrycf")
+render_help("h_retrycf", "Automatically attempt challenge bypass loops.")
 
 if st.sidebar.button("💾 Apply Settings", type="primary", use_container_width=True):
     try:
