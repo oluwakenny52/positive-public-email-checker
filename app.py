@@ -207,7 +207,7 @@ def instant_help_public(key_name, description_text, label_text):
         st.sidebar.markdown(f"<div class='help-box'>💡 {description_text}</div>", unsafe_allow_html=True)
 
 # ==========================================
-# PROXY CONFIGURATION (ALL KEYS INCLUDED)
+# PROXY CONFIGURATION 
 # ==========================================
 WEBSHARE_KEYS = [
     "ty1wj93kaw0k1ab7vv05lqvga86zs6tu2ngqjkyo",   
@@ -226,7 +226,7 @@ OXYLABS_PROXIES = [
     "user-Positivekenny_ls8CB-country-US:Adejoke52_52@dc.oxylabs.io:8000",       
 ]
 
-PROXY_TEST_TIMEOUT = 7
+PROXY_TEST_TIMEOUT = 5
 MAX_TEST_WORKERS = 12
 
 def parse_proxy_for_playwright(proxy_str):
@@ -272,7 +272,7 @@ def test_one(proxy_str):
         latency = int((time.time() - start) * 1000)
         country = "US"
         try:
-            g = requests.get("http://ip-api.com/json/", proxies={"http": proxy_formatted, "https": proxy_formatted}, timeout=4).json()
+            g = requests.get("http://ip-api.com/json/", proxies={"http": proxy_formatted, "https": proxy_formatted}, timeout=3).json()
             country = g.get("countryCode", "US")
         except Exception:
             pass
@@ -300,7 +300,7 @@ def load_webshare(api_key):
     out = []
     try:
         headers = {"Authorization": f"Token {api_key.strip()}"}
-        r = requests.get("https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=100", headers=headers, timeout=15)
+        r = requests.get("https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=100", headers=headers, timeout=10)
         if r.status_code == 200:
             data = r.json()
             for it in data.get("results", []):
@@ -314,11 +314,12 @@ def load_webshare(api_key):
 # ==========================================
 st.sidebar.title("🎛️ Control Panel")
 
+# FIXED: Completely wipes all widget states so reset actually works
 if st.sidebar.button("🔄 Reset Config to Default", use_container_width=True):
     log_action("Clicked 'Reset Config to Default'")
     st.session_state.BROWSER_CFG = DEFAULT_BROWSER_CFG.copy()
     for key in list(st.session_state.keys()):
-        if key.startswith("sb_"):
+        if key.startswith("sb_") or key.startswith("opt_"):
             del st.session_state[key]
     st.sidebar.success("Settings restored & sliders reset!")
     time.sleep(0.3)
@@ -376,7 +377,7 @@ if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", use_contai
             st.session_state.proxy_stats = {"total": len(all_raw), "alive": alive_count, "dead": dead_count, "countries": country_counts}
             log_action(f"Proxy fetch complete. Found {alive_count} healthy nodes.")
             st.sidebar.success(f"Cached {alive_count} working proxies!")
-            st.rerun() # Forces UI to immediately sync proxies to text box
+            st.rerun()
         except Exception as e:
             st.sidebar.error(f"Proxy fetch error: {str(e)}")
 
@@ -398,22 +399,6 @@ cfg["REST_AFTER_FAIL"] = st.sidebar.slider("Rest fail slider", 30, 300, cfg["RES
 
 instant_help_public("h_ok", "Cool-down period following a successful session.", "Rest OK (s):")
 cfg["REST_AFTER_SUCCESS"] = st.sidebar.slider("Rest ok slider", 15, 180, cfg["REST_AFTER_SUCCESS"], 5, key="sb_ok", label_visibility="collapsed")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🔒 Advanced Flags & Filters")
-
-instant_help_public("h_dispo", "Automatically skips temporary/disposable mail domains.", "Block Disposable Emails:")
-cfg["FILTER_DISPOSABLE"] = st.sidebar.checkbox("Disposable Filter Checkbox", value=cfg["FILTER_DISPOSABLE"], key="sb_dispo", label_visibility="collapsed")
-
-instant_help_public("h_fire", "ON = Force a fresh isolated browser context per account to wipe cookies, cache, and storage.", "Fire-up (Fresh Tab Isolation):")
-cfg["FIRE_UP"] = st.sidebar.checkbox("Fire-up Checkbox", value=cfg["FIRE_UP"], key="sb_fire", label_visibility="collapsed")
-
-instant_help_public("h_useproxy", "Master switch enabling proxy route tunnels.", "Use Proxies:")
-cfg["USE_PROXIES"] = st.sidebar.checkbox("Use Proxies Checkbox", value=cfg["USE_PROXIES"], key="sb_useproxy", label_visibility="collapsed")
-
-if st.sidebar.button("💾 Apply Settings", type="primary", use_container_width=True):
-    log_action("Clicked 'Apply Settings' in Control Panel")
-    st.sidebar.success("Configuration successfully locked & applied!")
 
 # ==========================================
 # PLAYWRIGHT AUTOMATION DRIVER & WORKER ENGINE
@@ -614,6 +599,19 @@ tab_engine, tab_terminal, tab_dashboard, tab_logs = st.tabs([
 with tab_engine:
     st.subheader("Batch Account & Dynamic Provider Processor")
     
+    # FIXED: Restored all advanced configuration checkboxes cleanly right onto the main UI so they are never hidden on mobile!
+    with st.expander("🛠️ Advanced Configuration & Toggles (Click to Expand)", expanded=True):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            cfg["USE_PROXIES"] = st.checkbox("Use Proxies", value=cfg.get("USE_PROXIES", True), key="opt_use_proxies")
+            cfg["STEALTH"] = st.checkbox("Stealth Mode", value=cfg.get("STEALTH", True), key="opt_stealth")
+            cfg["FIRE_UP"] = st.checkbox("Warm-up Browser (Fresh Context)", value=cfg.get("FIRE_UP", True), key="opt_fireup")
+            cfg["FORCE_EN_US"] = st.checkbox("Force English UI (en-US)", value=cfg.get("FORCE_EN_US", True), key="opt_en_us")
+        with col_b:
+            cfg["SCREENSHOT_FINAL"] = st.checkbox("Save Failure Screenshots", value=cfg.get("SCREENSHOT_FINAL", True), key="opt_screenshot")
+            cfg["FILTER_DISPOSABLE"] = st.checkbox("Block Disposable Emails", value=cfg.get("FILTER_DISPOSABLE", True), key="opt_disposable")
+            st.markdown("🔒 **WebAuthn / Passkeys:** Disabled by default for stability")
+
     instant_help_public("h_provider", "Select target mail ecosystem or let Dynamic Router handle everything automatically.", "Select Provider Mode:")
     email_provider = st.selectbox(
         "Provider select",
@@ -640,7 +638,6 @@ with tab_engine:
         label_visibility="collapsed"
     )
     
-    # FIXED: Bound with session state key to dynamically update when scraped proxies load
     proxies_raw = st.text_area(
         "Verified Proxy Pool (Auto-populated from Scraper)",
         value=st.session_state.fetched_proxies,
@@ -703,7 +700,6 @@ with tab_engine:
         st.markdown("### **Live Execution & Action Stream**")
         st.code("\n".join(st.session_state.engine_logs[-40:]), language="text")
 
-    # FIXED: Streamlit Live UI Polling loop while running so logs stream in real-time without freezing
     if st.session_state.running:
         time.sleep(1.5)
         st.rerun()
