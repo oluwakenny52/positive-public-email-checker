@@ -29,12 +29,13 @@ if "running" not in st.session_state:
 if "proxy_stats" not in st.session_state:
     st.session_state.proxy_stats = {"total": 0, "alive": 0, "dead": 0, "countries": {}}
 
-# Initialize Help Toggle States with Timestamps for 10s auto-clear
+# Initialize Help Toggle States with Timestamps for 10s auto-clear (Sidebar & Main Tab)
 for help_key in [
     "h_speed", "h_timeout", "h_maxacc", "h_delay", "h_fail", "h_ok", 
     "h_type", "h_pagewait", "h_tries", "h_score", "h_proxmode", "h_poolmode",
     "h_country", "h_mix", "h_debug", "h_fire", "h_useproxy", "h_stealth",
-    "h_warm", "h_forceen", "h_shot", "h_webauthn", "h_retrycf"
+    "h_warm", "h_forceen", "h_shot", "h_webauthn", "h_retrycf",
+    "h_provider", "h_threads", "h_accounts"
 ]:
     if help_key not in st.session_state:
         st.session_state[help_key] = {"active": False, "time": 0}
@@ -541,8 +542,9 @@ tab_engine, tab_terminal, tab_dashboard, tab_logs = st.tabs([
 with tab_engine:
     st.subheader("Batch Account & Provider Processor")
     
-    col1, col2 = st.columns(2)
-    with col1:
+    # Provider Row with [ ? ]
+    c_prov1, c_prov2 = st.columns([19, 1])
+    with c_prov1:
         email_provider = st.selectbox(
             "Select Public Email Provider",
             [
@@ -554,17 +556,38 @@ with tab_engine:
                 "Proton Mail", 
                 "Custom IMAP Endpoint"
             ],
-            help="Target mail ecosystem router."
+            key="eng_provider"
         )
-    with col2:
-        max_threads = st.number_input("Concurrent Threads", min_value=1, max_value=10, value=3, help="Simultaneous processing pipelines.")
+    with c_prov2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("❓", key="btn_h_provider"):
+            toggle_help("h_provider")
+    render_help("h_provider", "Select target mail ecosystem router for automated login and validation.")
 
-    accounts_raw = st.text_area(
-        "Accounts Pool (email:password format, one per line)",
-        height=140,
-        placeholder="account1@outlook.com:Pass123!\naccount2@gmail.com:Secret456!",
-        help="Paste target credentials here."
-    )
+    # Threads Row with [ ? ]
+    c_thr1, c_thr2 = st.columns([19, 1])
+    with c_thr1:
+        max_threads = st.number_input("Concurrent Threads", min_value=1, max_value=10, value=3, key="eng_threads")
+    with c_thr2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("❓", key="btn_h_threads"):
+            toggle_help("h_threads")
+    render_help("h_threads", "Configure simultaneous browser/session processing pipelines.")
+
+    # Accounts Pool Row with [ ? ]
+    c_acc1, c_acc2 = st.columns([19, 1])
+    with c_acc1:
+        accounts_raw = st.text_area(
+            "Accounts Pool (email:password format, one per line)",
+            height=140,
+            placeholder="account1@outlook.com:Pass123!\naccount2@gmail.com:Secret456!",
+            key="eng_accounts"
+        )
+    with c_acc2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("❓", key="btn_h_accounts"):
+            toggle_help("h_accounts")
+    render_help("h_accounts", "Input target email accounts and passwords separated by colon, one pair per line.")
     
     proxies_raw = st.text_area(
         "Verified Proxy Pool (Auto-populated from Cell 2 Scraper)",
