@@ -100,7 +100,7 @@ def detect_provider_from_email(email):
     except Exception:
         return "Custom / Universal Enterprise Webmail"
 
-# --- Device & Screen Profiles Pool (Colab / Mobile & Desktop Emulation) ---
+# --- Device & Screen Profiles Pool ---
 DEVICE_PROFILES = [
     {
         "name": "Windows Desktop Chrome",
@@ -148,6 +148,12 @@ if "proxy_stats" not in st.session_state:
 if "help_states" not in st.session_state:
     st.session_state.help_states = {}
 
+def log_action(message):
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    log_entry = f"[{timestamp}] 🖱️ ACTION: {message}"
+    with results_lock:
+        st.session_state.engine_logs.append(log_entry)
+
 DEFAULT_BROWSER_CFG = {
     "BROWSER_TIMEOUT": 45,
     "MAX_ACCOUNTS": 5000,
@@ -194,13 +200,14 @@ def instant_help_public(key_name, description_text, label_text):
         if st.button("❓", key=f"help_btn_{key_name}", help="Toggle help description"):
             current = st.session_state.help_states[key_name]["visible"]
             st.session_state.help_states[key_name] = {"visible": not current, "time": time.time()}
+            log_action(f"Toggled help menu: {label_text}")
             st.rerun()
 
     if st.session_state.help_states[key_name]["visible"]:
         st.sidebar.markdown(f"<div class='help-box'>💡 {description_text}</div>", unsafe_allow_html=True)
 
 # ==========================================
-# PROXY SCRAPER & HEALTH SCORING (ALL KEYS INCLUDED)
+# PROXY CONFIGURATION (ALL KEYS INCLUDED)
 # ==========================================
 WEBSHARE_KEYS = [
     "ty1wj93kaw0k1ab7vv05lqvga86zs6tu2ngqjkyo",   
@@ -308,11 +315,13 @@ def load_webshare(api_key):
 st.sidebar.title("🎛️ Control Panel")
 
 if st.sidebar.button("🔄 Reset Config to Default", use_container_width=True):
+    log_action("Clicked 'Reset Config to Default'")
     st.session_state.BROWSER_CFG = DEFAULT_BROWSER_CFG.copy()
     for key in list(st.session_state.keys()):
         if key.startswith("sb_"):
             del st.session_state[key]
     st.sidebar.success("Settings restored & sliders reset!")
+    time.sleep(0.3)
     st.rerun()
 
 st.sidebar.markdown("---")
@@ -321,16 +330,19 @@ speed_mode = st.sidebar.selectbox("Speed Mode Preset Selector", ["slow", "normal
 
 if st.sidebar.button("⚡ Apply Mode Preset", use_container_width=True):
     try:
+        log_action(f"Clicked 'Apply Mode Preset' with mode: {speed_mode}")
         preset = MODE_PRESETS[speed_mode]
         for k, v in preset.items():
             st.session_state.BROWSER_CFG[k] = v
         st.sidebar.success(f"Applied preset: {speed_mode}")
+        st.rerun()
     except Exception as e:
         st.sidebar.error(f"Error applying preset: {e}")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🌐 Live Proxy Scraper")
 if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", use_container_width=True):
+    log_action("Clicked 'Fetch & Test All Proxies'")
     with st.spinner("Scraping nodes & running health checks..."):
         try:
             all_raw = []
@@ -362,7 +374,9 @@ if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", use_contai
             st.session_state.fetched_proxies = "\n".join(alive)
             st.session_state.proxy_logs = logs
             st.session_state.proxy_stats = {"total": len(all_raw), "alive": alive_count, "dead": dead_count, "countries": country_counts}
+            log_action(f"Proxy fetch complete. Found {alive_count} healthy nodes.")
             st.sidebar.success(f"Cached {alive_count} working proxies!")
+            st.rerun() # Forces UI to immediately sync proxies to text box
         except Exception as e:
             st.sidebar.error(f"Proxy fetch error: {str(e)}")
 
@@ -398,6 +412,7 @@ instant_help_public("h_useproxy", "Master switch enabling proxy route tunnels.",
 cfg["USE_PROXIES"] = st.sidebar.checkbox("Use Proxies Checkbox", value=cfg["USE_PROXIES"], key="sb_useproxy", label_visibility="collapsed")
 
 if st.sidebar.button("💾 Apply Settings", type="primary", use_container_width=True):
+    log_action("Clicked 'Apply Settings' in Control Panel")
     st.sidebar.success("Configuration successfully locked & applied!")
 
 # ==========================================
@@ -428,8 +443,6 @@ def execute_provider_automation(email, password, resolved_provider, proxy_dict, 
                 launch_args["proxy"] = proxy_dict
 
             browser = p.chromium.launch(**launch_args)
-
-            # Randomly select a device profile (Desktop / Mobile screen specs & user agents)
             selected_device = random.choice(DEVICE_PROFILES)
 
             context_args = {
@@ -443,15 +456,12 @@ def execute_provider_automation(email, password, resolved_provider, proxy_dict, 
                 context_args["has_touch"] = True
 
             context = browser.new_context(**context_args)
-
             page = context.new_page()
             page.set_default_timeout(config.get("BROWSER_TIMEOUT", 45) * 1000)
 
-            # Event listeners for popups and dialogs
             page.on("dialog", lambda dialog: dialog.accept())
             page.on("popup", lambda popup_page: popup_page.close())
 
-            # Dynamic URL selection
             if "Microsoft" in resolved_provider:
                 target_url = "https://login.live.com/"
             elif "Google" in resolved_provider:
@@ -464,7 +474,6 @@ def execute_provider_automation(email, password, resolved_provider, proxy_dict, 
             page.goto(target_url, wait_until="domcontentloaded")
             time.sleep(config.get("PAGE_WAIT_S", 3))
 
-            # --- 2FA & Checkpoint Detection Hook ---
             page_content = page.content().lower()
             checkpoint_triggers = [
                 "enter code sent", "verify it's you", "unusual sign-in", 
@@ -473,11 +482,9 @@ def execute_provider_automation(email, password, resolved_provider, proxy_dict, 
             if any(trig in page_content for trig in checkpoint_triggers):
                 return False, "Checkpoint Triggered: 2FA / Verification Screen Detected"
 
-            # Simulation placeholder for verification workflow
             is_successful = random.choice([True, False])
             
             if is_successful:
-                # Save session cookies & storage state for downstream cells
                 safe_filename = re.sub(r'[^a-zA-Z0-9_-]', '_', email)
                 storage_path = os.path.join(SESSION_DIR, f"{safe_filename}.json")
                 context.storage_state(path=storage_path)
@@ -564,7 +571,7 @@ def process_single_account(email, password, forced_provider_override, proxies_po
 def run_checker_engine(accounts_list, provider_override, proxies_pool, config, max_workers):
     try:
         with results_lock:
-            st.session_state.engine_logs.append(f"Engine initialized with Session State Export & 2FA Hooks. Processing {len(accounts_list)} accounts with {max_workers} worker threads...")
+            st.session_state.engine_logs.append(f"Engine initialized. Processing {len(accounts_list)} accounts with {max_workers} worker threads...")
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
@@ -633,10 +640,12 @@ with tab_engine:
         label_visibility="collapsed"
     )
     
+    # FIXED: Bound with session state key to dynamically update when scraped proxies load
     proxies_raw = st.text_area(
         "Verified Proxy Pool (Auto-populated from Scraper)",
         value=st.session_state.fetched_proxies,
         height=120,
+        key="eng_proxies",
         placeholder="IP:Port:User:Pass (or click 'Fetch & Test All Proxies' in the sidebar)..."
     )
 
@@ -647,6 +656,7 @@ with tab_engine:
         stop_engine = st.button("⏹️ Stop / Force Unlock", use_container_width=True)
     with c3:
         if st.button("🧹 Clear Logs & Cache", use_container_width=True):
+            log_action("Clicked 'Clear Logs & Cache'")
             st.session_state.engine_logs = []
             st.session_state.proxy_logs = []
             st.session_state.filtered_disposable = []
@@ -654,10 +664,12 @@ with tab_engine:
             st.rerun()
 
     if stop_engine:
+        log_action("Clicked 'Stop / Force Unlock'")
         st.session_state.running = False
         st.warning("Engine force-stopped by user.")
 
     if start_engine:
+        log_action("Clicked 'Launch Checker Engine'")
         accounts_lines = [line.strip() for line in accounts_raw.splitlines() if line.strip() and ":" in line]
         proxies_lines = [line.strip() for line in proxies_raw.splitlines() if line.strip()]
         
@@ -665,7 +677,7 @@ with tab_engine:
             st.error("Validation Error: Please add valid account lines in email:password format.")
         else:
             st.session_state.running = True
-            st.success(f"Engine started for {len(accounts_lines)} accounts using [{email_provider}]!")
+            log_action(f"Starting engine thread for {len(accounts_lines)} accounts...")
             
             worker_thread = threading.Thread(
                 target=run_checker_engine,
@@ -673,6 +685,8 @@ with tab_engine:
                 daemon=True
             )
             worker_thread.start()
+            st.success(f"Engine started for {len(accounts_lines)} accounts using [{email_provider}]!")
+            st.rerun()
 
     if st.session_state.SUCCESSFUL_ACCOUNTS:
         st.markdown("### 📥 Export Successful Results & Sessions")
@@ -684,14 +698,15 @@ with tab_engine:
             mime="text/plain",
             use_container_width=True
         )
-        st.info("💡 **Integration Note:** Successful session states are saved inside the `sessions/` directory. Downstream notebook cells can initialize them instantly via `browser.new_context(storage_state='sessions/account_email.json')`.")
-
-    if st.session_state.filtered_disposable:
-        st.info(f"Filtered out {len(st.session_state.filtered_disposable)} disposable/throwaway accounts in this run.")
 
     if st.session_state.engine_logs:
-        st.markdown("### **Live Execution Stream**")
+        st.markdown("### **Live Execution & Action Stream**")
         st.code("\n".join(st.session_state.engine_logs[-40:]), language="text")
+
+    # FIXED: Streamlit Live UI Polling loop while running so logs stream in real-time without freezing
+    if st.session_state.running:
+        time.sleep(1.5)
+        st.rerun()
 
 with tab_terminal:
     st.subheader("Interactive Terminal Remote")
@@ -719,5 +734,5 @@ with tab_logs:
         st.markdown("#### Proxy Scraper Logs")
         st.code("\n".join(st.session_state.proxy_logs), language="text")
     if st.session_state.engine_logs:
-        st.markdown("#### Engine Activity Logs")
+        st.markdown("#### Engine Activity & Action Logs")
         st.code("\n".join(st.session_state.engine_logs), language="text")
