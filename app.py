@@ -1,14 +1,5 @@
+import streamlit as st
 import subprocess
-import os
-
-@st.cache_resource(show_spinner="Initializing Playwright browser...")
-def install_playwright():
-    subprocess.run(["playwright", "install", "chromium"], check=True)
-
-try:
-    install_playwright()
-except Exception as e:
-    st.error(f"Failed to install Playwright browser: {e}")
 import os
 import re
 import time
@@ -21,7 +12,14 @@ import hashlib
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs, unquote
 
-import streamlit as st
+@st.cache_resource(show_spinner="Initializing Playwright browser...")
+def install_playwright():
+    subprocess.run(["playwright", "install", "chromium"], check=True)
+
+try:
+    install_playwright()
+except Exception as e:
+    st.error(f"Failed to install Playwright browser: {e}")
 
 # --- Page Configuration ---
 st.set_page_config(
