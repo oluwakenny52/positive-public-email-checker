@@ -1,3 +1,9 @@
+# ==========================================================
+# FILE: app.py
+# VERSION: v1.1
+# DESCRIPTION: Microsoft Account Sentinel Engine - UI Shell & Fixed Layout
+# ==========================================================
+
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
@@ -24,15 +30,6 @@ st.markdown("""
         border-radius: 8px;
         text-align: center;
     }
-    .help-box {
-        background-color: #1e1e2f;
-        border-left: 3px solid #ff4b4b;
-        padding: 8px 12px;
-        margin: 4px 0 10px 0;
-        font-size: 0.85rem;
-        color: #d1d5db;
-        border-radius: 4px;
-    }
     .stButton button {
         border-radius: 6px;
         font-weight: 600;
@@ -41,8 +38,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- SESSION STATE SHELL INITIALIZATION ---
-if "help_states" not in st.session_state:
-    st.session_state.help_states = {}
 if "proxy_nodes" not in st.session_state:
     st.session_state.proxy_nodes = [
         {"lat": 37.7749, "lon": -122.4194, "city": "San Francisco, US", "status": "Active", "latency": "42ms"},
@@ -50,63 +45,34 @@ if "proxy_nodes" not in st.session_state:
         {"lat": 52.5200, "lon": 13.4050, "city": "Berlin, DE", "status": "Active", "latency": "64ms"},
         {"lat": 35.6762, "lon": 139.6503, "city": "Tokyo, JP", "status": "Active", "latency": "120ms"},
     ]
-if "live_sessions_shell" not in st.session_state:
-    st.session_state.live_sessions_shell = {}
-
-# --- HELPER FOR INSTANT HELP BOXES ---
-def instant_help(key_name, description_text, label_text, widget_type="label", **kwargs):
-    if key_name not in st.session_state.help_states:
-        st.session_state.help_states[key_name] = {"visible": False}
-
-    col_lbl, col_btn = st.sidebar.columns([0.85, 0.15])
-    with col_lbl:
-        if widget_type == "label":
-            st.markdown(f"**{label_text}**")
-        elif widget_type == "checkbox":
-            val = st.checkbox(label_text, value=kwargs.get("value", False), key=f"chk_{key_name}")
-        elif widget_type in ("text", "selectbox"):
-            st.markdown(f"**{label_text}**")
-
-    with col_btn:
-        if st.button("❓", key=f"help_btn_{key_name}", help="Toggle help description"):
-            current = st.session_state.help_states[key_name]["visible"]
-            st.session_state.help_states[key_name]["visible"] = not current
-            st.rerun()
-
-    if st.session_state.help_states[key_name]["visible"]:
-        st.sidebar.markdown(f"<div class='help-box'>💡 {description_text}</div>", unsafe_allow_html=True)
-
-    if widget_type == "checkbox":
-        return val
-    return None
 
 # ==========================================
-# SIDEBAR CONTROL PANEL (ALL DROPDOWNS & SLIDERS)
+# SIDEBAR CONTROL PANEL (FIXED & FULLY RENDERED)
 # ==========================================
 st.sidebar.title("🎛️ Microsoft Sentinel Panel")
 st.sidebar.markdown("Focused Exclusively on Microsoft Accounts (`login.live.com`).")
 
 with st.sidebar.expander("⚙️ Execution & Thread Settings", expanded=True):
-    instant_help("workers", "Initial number of concurrent worker threads spawned to validate incoming Microsoft accounts.", "Workers Start:")
+    st.markdown("**Workers Start:**")
     workers = st.slider("Workers Slider", min_value=1, max_value=50, value=5, step=1, label_visibility="collapsed")
 
-    instant_help("deadline", "Maximum execution time allotted per validation batch task.", "Deadline (s):")
+    st.markdown("**Deadline (s):**")
     deadline = st.slider("Deadline Slider", min_value=5, max_value=120, value=45, step=5, label_visibility="collapsed")
 
-    instant_help("max_acc", "Maximum number of accounts to check in a single live run (0 for unlimited).", "Max Accounts:")
+    st.markdown("**Max Accounts:**")
     max_acc = st.slider("Max Accounts Slider", min_value=0, max_value=5000, value=5000, step=100, label_visibility="collapsed")
 
 with st.sidebar.expander("🌐 Proxy Filtering & Pool Modes", expanded=False):
-    instant_help("min_proxy_score", "Only proxies with a health score greater than or equal to this value will be utilized.", "Min proxy score:")
+    st.markdown("**Min proxy score:**")
     min_proxy_score = st.slider("Min proxy score Slider", min_value=0, max_value=100, value=40, step=5, label_visibility="collapsed")
 
-    instant_help("pool_mode", "Defines how proxies are filtered and loaded into active rotation.", "Pool mode:", widget_type="selectbox")
+    st.markdown("**Pool mode:**")
     pool_mode = st.selectbox("Pool mode select", options=["us_only", "all", "country", "mix"], index=0, label_visibility="collapsed")
 
-    instant_help("country_code", "Target country specification code (e.g., US, GB, DE).", "Country code:", widget_type="text")
+    st.markdown("**Country code:**")
     country_code = st.text_input("Country code input", value="US", label_visibility="collapsed")
 
-    instant_help("mix_list", "Comma-separated country list for blended regional proxy routing.", "Mix list:", widget_type="text")
+    st.markdown("**Mix list:**")
     mix_list = st.text_input("Mix list input", value="US,GB,DE", label_visibility="collapsed")
 
 with st.sidebar.expander("🛡️ Behavioral Toggles", expanded=False):
@@ -158,11 +124,11 @@ with tab_engine:
 
     st.markdown("---")
 
-    # Interactive Global Proxy & Traffic Map
+    # Interactive Global Proxy & Traffic Map (Using clean OpenStreetMap tiles)
     st.subheader("🌍 Interactive Global Node & Traffic Map")
     st.markdown("Real-time geographic distribution of active proxy nodes routing your Microsoft verification requests.")
 
-    m = folium.Map(location=[20.0, 0.0], zoom_start=2, tiles="CartoDB dark_matter")
+    m = folium.Map(location=[20.0, 0.0], zoom_start=2, tiles="OpenStreetMap")
     for node in st.session_state.proxy_nodes:
         color = "green" if node["status"] == "Active" else "red"
         popup_text = f"<b>Location:</b> {node['city']}<br><b>Status:</b> {node['status']}<br><b>Latency:</b> {node['latency']}"
@@ -215,7 +181,7 @@ with tab_engine:
     )
 
     st.markdown("### **📊 Live Execution Log Viewer**")
-    st.code("[15:14:34] 🚀 UI Shell initialized successfully. Waiting for engine execution hook...", language="text")
+    st.code("[15:14:34] 🚀 UI Shell v1.1 initialized successfully. Waiting for engine execution hook...", language="text")
 
 with tab_terminal:
     st.subheader("💻 Terminal Remote & Inbox Reader")
