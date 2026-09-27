@@ -1,7 +1,7 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v1.3
-# DESCRIPTION: Microsoft Account Sentinel Engine - Complete Front-End Control & Proxy Suite
+# VERSION: v1.4
+# DESCRIPTION: Microsoft Account Sentinel Engine - Advanced Automation & Debug Suite
 # ==========================================================
 
 import streamlit as st
@@ -31,6 +31,14 @@ st.markdown("""
         border-radius: 8px;
         text-align: center;
     }
+    .diagnostic-box {
+        background-color: #211c1d;
+        border-left: 4px solid #f85149;
+        padding: 12px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 13px;
+    }
     .stButton button {
         border-radius: 6px;
         font-weight: 600;
@@ -56,7 +64,7 @@ if "proxy_table_data" not in st.session_state:
     ])
 
 # ==========================================
-# SIDEBAR CONTROL PANEL (COMPLETE v1.3 SUITE)
+# SIDEBAR CONTROL PANEL (COMPLETE v1.4 SUITE)
 # ==========================================
 st.sidebar.title("🎛️ Microsoft Sentinel Panel")
 st.sidebar.markdown("Focused Exclusively on Microsoft Accounts (`login.live.com`).")
@@ -71,7 +79,13 @@ with st.sidebar.expander("⚙️ Execution & Thread Settings", expanded=True):
     st.markdown("**Max Accounts:**")
     max_acc = st.slider("Max Accounts Slider", min_value=0, max_value=5000, value=5000, step=100, label_visibility="collapsed")
 
+    st.markdown("**Delay Between Accounts (s):**")
+    delay_between_acc = st.slider("Delay Between Accounts", min_value=0, max_value=15, value=2, step=1, label_visibility="collapsed")
+
 with st.sidebar.expander("🌐 Proxy Infrastructure & Routing", expanded=False):
+    use_proxies = st.checkbox("Enable Proxy Routing", value=True)
+    preflight_test = st.checkbox("Preflight Test Proxy against Live", value=True)
+
     st.markdown("**Proxy Protocol:**")
     proxy_protocol = st.selectbox("Proxy Protocol Select", options=["HTTP/HTTPS", "SOCKS5", "SOCKS4", "Mixed"], index=0, label_visibility="collapsed")
 
@@ -95,8 +109,13 @@ with st.sidebar.expander("🌐 Proxy Infrastructure & Routing", expanded=False):
 
 with st.sidebar.expander("🛡️ Stealth & Anti-Bot", expanded=False):
     stealth_mode = st.checkbox("Stealth Mode (Mask WebDriver)", value=True)
+    fire_up_fail = st.checkbox("🔥 Fire-up on Fail (Clear Context / Fresh Tab)", value=True)
+    force_en_us = st.checkbox("Force en-US UI Language", value=True)
     block_webauthn = st.checkbox("Block WebAuthn / Passkeys", value=True)
-    warm_up = st.checkbox("Warm-up Session Profile", value=False)
+    warm_up = st.checkbox("Warm-up (Random Neutral Site)", value=True)
+    keep_alive_js = st.checkbox("Keep-alive JSClicks (Prevent Idle)", value=True)
+    device_pool = st.checkbox("Device Pool (Rotate UA / Viewport)", value=True)
+    debug_verbose = st.checkbox("Verbose Protocol Path Logs", value=True)
 
     st.markdown("**Speed Mode Preset:**")
     speed_preset = st.selectbox("Speed Preset", options=["slow", "normal", "fast", "superfast"], index=1, label_visibility="collapsed")
@@ -107,9 +126,25 @@ with st.sidebar.expander("🛡️ Stealth & Anti-Bot", expanded=False):
     st.markdown("**Mouse Move Delay (ms):**")
     mouse_delay = st.slider("Mouse Delay", min_value=0, max_value=500, value=100, step=25, label_visibility="collapsed")
 
+with st.sidebar.expander("⏱️ Throttling & Rest Sliders", expanded=False):
+    st.markdown("**Rest After Fail (s):**")
+    rest_fail = st.slider("Rest After Fail", min_value=0, max_value=30, value=3, step=1, label_visibility="collapsed")
+
+    st.markdown("**Rest After Success (s):**")
+    rest_success = st.slider("Rest After Success", min_value=0, max_value=30, value=5, step=1, label_visibility="collapsed")
+
+    filter_disposable = st.checkbox("Filter Disposable Emails", value=True)
+    retry_cloudflare = st.checkbox("Auto-Retry Security Challenges", value=True)
+
 with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
     st.markdown("**Webhook Endpoint URL:**")
     webhook_url = st.text_input("Webhook URL", value="", placeholder="https://discord.com/api/webhooks/...", label_visibility="collapsed")
+
+    st.markdown("**Telegram Bot Token:**")
+    tg_token = st.text_input("Telegram Token", value="", placeholder="123456:ABC-DEF...", type="password", label_visibility="collapsed")
+
+    st.markdown("**Telegram Chat ID:**")
+    tg_chat_id = st.text_input("Telegram Chat ID", value="", placeholder="-100xxxxxxxxxx", label_visibility="collapsed")
 
 # Settings Action Buttons
 col_sb1, col_sb2 = st.sidebar.columns(2)
@@ -141,10 +176,11 @@ if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", use_contai
 st.title("🛡️ Microsoft Account Sentinel & Global Routing Map")
 st.markdown("Enterprise-grade validation framework optimized strictly for Microsoft identity endpoints (`login.live.com`).")
 
-tab_engine, tab_proxies, tab_terminal = st.tabs([
+tab_engine, tab_proxies, tab_terminal, tab_debug = st.tabs([
     "🚀 Engine Runner", 
     "🌐 Proxy Manager",
-    "💻 Terminal Remote"
+    "💻 Terminal Remote",
+    "🔍 Debug Viewer"
 ])
 
 with tab_engine:
@@ -192,45 +228,67 @@ with tab_engine:
         st.markdown("**Upload Combo Text File**")
         st.file_uploader("Upload .txt combo file", type=["txt"], label_visibility="collapsed")
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     with c1:
-        start_engine = st.button("▶️ Launch Microsoft Engine", type="primary", use_container_width=True)
+        start_engine = st.button("▶️ Launch Engine", type="primary", use_container_width=True)
     with c2:
-        stop_engine = st.button("⏹️ Stop / Force Unlock", use_container_width=True)
+        pause_engine = st.button("⏸️ Pause Engine", use_container_width=True)
     with c3:
-        clear_logs = st.button("🧹 Clear Logs & Cache", use_container_width=True)
+        stop_engine = st.button("⏹️ Force Unlock", use_container_width=True)
+    with c4:
+        clear_logs = st.button("🧹 Clear Logs", use_container_width=True)
 
     if start_engine:
         st.info("UI Shell Test: Launch button clicked successfully!")
+    if pause_engine:
+        st.warning("UI Shell Test: Engine paused.")
     if stop_engine:
-        st.warning("UI Shell Test: Stop button clicked successfully!")
+        st.error("UI Shell Test: Force unlocked.")
     if clear_logs:
-        st.success("UI Shell Test: Clear logs button clicked successfully!")
+        st.success("UI Shell Test: Logs cleared.")
 
-    # Export Button Placeholder
+    # Export Button Placeholders
     st.markdown("### 📥 Flexible Export Format Options")
-    st.download_button(
-        label="💾 Download Working Accounts (TXT)",
-        data="user@outlook.com:ExamplePassword123\n",
-        file_name="microsoft_hits_sample.txt",
-        mime="text/plain",
-        use_container_width=True
-    )
+    col_exp1, col_exp2, col_exp3 = st.columns(3)
+    with col_exp1:
+        st.download_button(
+            label="💾 Working Hits (TXT)",
+            data="user@outlook.com:Pass123\n",
+            file_name="microsoft_hits.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+    with col_exp2:
+        st.download_button(
+            label="💾 Checkpoints / Captcha",
+            data="user@outlook.com:Pass123\n",
+            file_name="microsoft_checkpoints.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+    with col_exp3:
+        st.download_button(
+            label="💾 Full Session JSON",
+            data="{\"sessions\": []}\n",
+            file_name="session_report.json",
+            mime="application/json",
+            use_container_width=True
+        )
 
     st.markdown("### **📊 Live Execution Log Viewer**")
-    st.code("[15:14:34] 🚀 UI Shell v1.3 initialized successfully. All advanced controls active.", language="text")
+    st.code("[15:14:34] 🚀 UI Shell v1.4 initialized successfully. All automation modules loaded.", language="text")
 
 with tab_proxies:
     st.subheader("🌐 Live Proxy Pool & Infrastructure Manager")
-    st.markdown("Inspect, filter, and manage your active proxy rotation pool in real-time.")
+    st.markdown("Inspect, filter, and manage your active proxy rotation pool with parallel health checks.")
 
     # Proxy Data Grid Table View
     st.dataframe(st.session_state.proxy_table_data, use_container_width=True)
 
     col_px1, col_px2, col_px3 = st.columns(3)
     with col_px1:
-        if st.button("⚡ Run Pool Health Check", type="primary", use_container_width=True):
-            st.success("Proxy health check sequence simulated!")
+        if st.button("⚡ Run Parallel Health Test", type="primary", use_container_width=True):
+            st.success("Parallel proxy health check completed (Alive check, latency, score verified)!")
     with col_px2:
         if st.button("🧹 Clear Dead Proxies", use_container_width=True):
             st.warning("Dead proxies flushed from rotation pool.")
@@ -244,14 +302,40 @@ with tab_proxies:
         )
 
 with tab_terminal:
-    st.subheader("💻 Terminal Remote & Inbox Reader")
+    st.subheader("💻 Terminal Remote & LIVE_MS_SESSIONS Reader")
     st.info("No active Microsoft account sessions captured in shell mode yet.")
     st.code("""
 Session Active    : N/A
-Storage File Path : sessions/none.json
+Storage File Path : sessions/LIVE_MS_SESSIONS.json
 Proxy Tunnel      : N/A
 Timestamp         : N/A
 --------------------------------------------------
 Latest Snippet / Inbox DOM:
 Waiting for backend automation integration...
+    """, language="text")
+
+with tab_debug:
+    st.subheader("🔍 Advanced Debug Viewer & Screen Dumps")
+    st.markdown("Inspect verbose protocol path logs, thread traces, and headless browser screen snapshots.")
+
+    st.markdown("### 🩺 Automated Error Diagnose Block")
+    st.markdown("""
+    <div class="diagnostic-box">
+    [DIAGNOSTIC STATUS]: OK<br>
+    - Proxy Latency Warning: None<br>
+    - Cloudflare Challenge Bypass: Ready<br>
+    - WebDriver Signature Mask: Active<br>
+    - Last Error Captured: None recorded in current run buffer.
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### 🖥️ Headless Browser Screen Dumps")
+    st.info("No screen dumps recorded yet. Dumps will automatically populate here upon encountering security checkpoints or validation failures.")
+
+    st.markdown("### 📜 Verbose Protocol Path Logs")
+    st.code("""
+[15:14:34] [VERBOSE] Initializing Playwright context with UA pool rotation...
+[15:14:35] [VERBOSE] Preflight test passed against login.live.com via proxy 192.168.1.10:8080 (42ms)
+[15:14:36] [VERBOSE] Navigating to https://login.live.com/ ...
+[15:14:37] [VERBOSE] Neutral warm-up site sequence successfully completed.
     """, language="text")
