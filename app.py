@@ -1,7 +1,7 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v1.2
-# DESCRIPTION: Microsoft Account Sentinel Engine - Full Front-End Proxy & UI Suite
+# VERSION: v1.3
+# DESCRIPTION: Microsoft Account Sentinel Engine - Complete Front-End Control & Proxy Suite
 # ==========================================================
 
 import streamlit as st
@@ -56,7 +56,7 @@ if "proxy_table_data" not in st.session_state:
     ])
 
 # ==========================================
-# SIDEBAR CONTROL PANEL (FULL PROXY & THREAD SUITE)
+# SIDEBAR CONTROL PANEL (COMPLETE v1.3 SUITE)
 # ==========================================
 st.sidebar.title("🎛️ Microsoft Sentinel Panel")
 st.sidebar.markdown("Focused Exclusively on Microsoft Accounts (`login.live.com`).")
@@ -93,14 +93,32 @@ with st.sidebar.expander("🌐 Proxy Infrastructure & Routing", expanded=False):
     st.markdown("**Mix List:**")
     mix_list = st.text_input("Mix list input", value="US,GB,DE", label_visibility="collapsed")
 
-with st.sidebar.expander("🛡️ Behavioral Toggles", expanded=False):
-    filter_disposable = st.checkbox("Filter Disposable Emails", value=True)
-    use_proxies = st.checkbox("Enable Proxy Routing", value=True)
-    stealth_mode = st.checkbox("Enable Browser Stealth", value=True)
-    retry_cloudflare = st.checkbox("Auto-Retry Security Challenges", value=True)
+with st.sidebar.expander("🛡️ Stealth & Anti-Bot", expanded=False):
+    stealth_mode = st.checkbox("Stealth Mode (Mask WebDriver)", value=True)
+    block_webauthn = st.checkbox("Block WebAuthn / Passkeys", value=True)
+    warm_up = st.checkbox("Warm-up Session Profile", value=False)
 
-if st.sidebar.button("💾 Apply Settings", type="primary", use_container_width=True):
-    st.sidebar.success("Configuration settings stored successfully!")
+    st.markdown("**Speed Mode Preset:**")
+    speed_preset = st.selectbox("Speed Preset", options=["slow", "normal", "fast", "superfast"], index=1, label_visibility="collapsed")
+
+    st.markdown("**Typing Speed (ms/char):**")
+    typing_speed = st.slider("Typing Speed", min_value=10, max_value=200, value=50, step=10, label_visibility="collapsed")
+
+    st.markdown("**Mouse Move Delay (ms):**")
+    mouse_delay = st.slider("Mouse Delay", min_value=0, max_value=500, value=100, step=25, label_visibility="collapsed")
+
+with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
+    st.markdown("**Webhook Endpoint URL:**")
+    webhook_url = st.text_input("Webhook URL", value="", placeholder="https://discord.com/api/webhooks/...", label_visibility="collapsed")
+
+# Settings Action Buttons
+col_sb1, col_sb2 = st.sidebar.columns(2)
+with col_sb1:
+    if st.button("🔄 Reset Defaults", use_container_width=True):
+        st.sidebar.info("Settings reset to defaults.")
+with col_sb2:
+    if st.button("💾 Apply Settings", type="primary", use_container_width=True):
+        st.sidebar.success("Configuration stored!")
 
 st.sidebar.markdown("---")
 col_p1, col_p2 = st.sidebar.columns(2)
@@ -200,7 +218,7 @@ with tab_engine:
     )
 
     st.markdown("### **📊 Live Execution Log Viewer**")
-    st.code("[15:14:34] 🚀 UI Shell v1.2 initialized successfully. Proxy infrastructure suite loaded.", language="text")
+    st.code("[15:14:34] 🚀 UI Shell v1.3 initialized successfully. All advanced controls active.", language="text")
 
 with tab_proxies:
     st.subheader("🌐 Live Proxy Pool & Infrastructure Manager")
