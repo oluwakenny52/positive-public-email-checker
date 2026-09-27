@@ -1,4 +1,9 @@
 import streamlit as st
+
+# Initialize session state variables
+if "running" not in st.session_state:
+    st.session_state.running = False
+
 import subprocess
 import os
 import re
