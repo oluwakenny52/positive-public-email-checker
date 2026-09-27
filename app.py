@@ -1,9 +1,5 @@
 import streamlit as st
-
-# Initialize session state variables
-if "running" not in st.session_state:
-    st.session_state.running = False
-
+import threading
 import subprocess
 import os
 import re
@@ -12,10 +8,12 @@ import json
 import random
 import requests
 import concurrent.futures
-import threading
 import hashlib
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs, unquote
+
+# --- GLOBAL THREAD GUARD ---
+worker_running = False
 
 @st.cache_resource(show_spinner="Initializing Playwright browser...")
 def install_playwright():
@@ -139,8 +137,6 @@ if "fetched_proxies" not in st.session_state:
     st.session_state.fetched_proxies = ""
 if "engine_logs" not in st.session_state:
     st.session_state.engine_logs = []
-if "running" not in st.session_state:
-    st.session_state.running = False
 if "proxy_stats" not in st.session_state:
     st.session_state.proxy_stats = {"total": 0, "alive": 0, "dead": 0, "countries": {}}
 if "help_states" not in st.session_state:
@@ -612,6 +608,9 @@ async def execute_login_flow(page, email, password, provider, config):
     return "error", "max steps reached"
 
 def run_checker_engine(accounts_list, provider_override, proxies_pool, config, max_workers):
+    global worker_running
+    worker_running = True
+
     try:
         import asyncio
         from playwright.sync_api import sync_playwright
@@ -620,6 +619,7 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
             st.session_state.engine_logs.append(f"Engine launched for {len(accounts_list)} accounts with {max_workers} workers.")
 
         def worker_thread_task():
+            global worker_running
             with sync_playwright() as p:
                 browser = p.chromium.launch(
                     headless=True,
@@ -627,7 +627,7 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
                 )
                 
                 for line in accounts_list:
-                    if not st.session_state.running:
+                    if not worker_running:
                         break
                     if ":" not in line:
                         continue
@@ -687,11 +687,12 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
                     time.sleep(1)
 
                 browser.close()
+                worker_running = False
 
         t = threading.Thread(target=worker_thread_task, daemon=True)
         t.start()
     except Exception as e:
-        st.session_state.running = False
+        worker_running = False
         with results_lock:
             st.session_state.engine_logs.append(f"🚨 Critical Engine Error: {str(e)}")
 
@@ -756,7 +757,7 @@ with tab_engine:
             st.rerun()
 
     if stop_engine:
-        st.session_state.running = False
+        worker_running = False
         st.warning("Engine force-stopped by user.")
 
     if start_engine:
@@ -766,7 +767,6 @@ with tab_engine:
         if not combined_accounts:
             st.error("Validation Error: Please paste or upload valid account lines in email:password format.")
         else:
-            st.session_state.running = True
             run_checker_engine(combined_accounts, email_provider, proxies_pool, st.session_state.BROWSER_CFG, max_threads)
             st.success(f"Engine started for {len(combined_accounts)} accounts using pool mode: {st.session_state.BROWSER_CFG.get('POOL_MODE')}!")
             st.rerun()
@@ -785,7 +785,7 @@ with tab_engine:
     st.markdown("### **📊 Live Execution Log Viewer**")
     st.code("\n".join(st.session_state.engine_logs[-40:]), language="text")
 
-    if st.session_state.running:
+    if worker_running:
         time.sleep(1.5)
         st.rerun()
 
