@@ -139,7 +139,7 @@ def log_action(message):
     with results_lock:
         st.session_state.engine_logs.append(log_entry)
 
-# --- Universal Help Tooltip Renderer (Mega Ultimate Reference Style) ---
+# --- Universal Help Tooltip Renderer ---
 def instant_help(key_name, description_text, label_text, widget_type="label", **kwargs):
     if key_name not in st.session_state.help_states:
         st.session_state.help_states[key_name] = {"visible": False, "time": 0}
@@ -173,7 +173,7 @@ def instant_help(key_name, description_text, label_text, widget_type="label", **
     return None
 
 # ==========================================
-# PROXY & WEBSHARE CONFIGURATION (FIXED)
+# PROXY & WEBSHARE CONFIGURATION
 # ==========================================
 WEBSHARE_KEYS = [
     "ty1wj93kaw0k1ab7vv05lqvga86zs6tu2ngqjkyo",   
@@ -294,10 +294,11 @@ def get_filtered_active_proxies():
             pass
 
     filtered = []
-    min_score = st.session_state.BROWSER_CFG.get("MIN_PROXY_SCORE", 40)
-    pool_mode = st.session_state.BROWSER_CFG.get("POOL_MODE", "us_only")
-    target_country = st.session_state.BROWSER_CFG.get("COUNTRY_CODE", "US")
-    mix_countries = st.session_state.BROWSER_CFG.get("MIX_LIST", ["US", "GB", "DE"])
+    cfg = st.session_state.get("BROWSER_CFG", {})
+    min_score = cfg.get("MIN_PROXY_SCORE", 40)
+    pool_mode = cfg.get("POOL_MODE", "us_only")
+    target_country = cfg.get("COUNTRY_CODE", "US")
+    mix_countries = cfg.get("MIX_LIST", ["US", "GB", "DE"])
 
     for p in raw_lines:
         if p in bad_proxies:
@@ -336,11 +337,10 @@ def send_telegram_alert(message):
         pass
 
 # ==========================================
-# SIDEBAR CONTROL PANEL (SLIDE-OUT FIXED)
+# SIDEBAR CONTROL PANEL
 # ==========================================
 st.sidebar.title("🎛️ Engine Control Panel")
 
-# --- Sliders integrated with Question Mark Helpers ---
 instant_help("workers", "Initial number of concurrent worker threads spawned to validate incoming accounts.", "Workers Start:")
 workers = st.sidebar.slider("Workers Start Slider", min_value=1, max_value=50, value=3, step=1, label_visibility="collapsed")
 
@@ -365,6 +365,14 @@ country_code = st.sidebar.text_input("Country code input", value="US", label_vis
 instant_help("mix_list", "Comma-separated country list for blended regional proxy routing.", "Mix list:", widget_type="text")
 mix_list = st.sidebar.text_input("Mix list input", value="US,GB,DE", label_visibility="collapsed")
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("⚙️ Advanced Behavior Toggles")
+
+filter_disposable = st.sidebar.checkbox("Filter Disposable Emails", value=True, help="Automatically block temp-mails (Mailinator, Yopmail, etc.)")
+use_proxies = st.sidebar.checkbox("Enable Proxy Routing", value=True, help="Route traffic through fetched/custom proxies.")
+stealth_mode = st.sidebar.checkbox("Enable Stealth Mode", value=True, help="Inject scripts to mask webdriver and automation fingerprints.")
+retry_cloudflare = st.sidebar.checkbox("Auto-Retry Cloudflare Challenges", value=True, help="Automatically handle and bypass browser gate challenges.")
+
 # --- Default Browser/Engine Configuration Dictionary ---
 DEFAULT_BROWSER_CFG = {
     "BROWSER_TIMEOUT": 45,
@@ -381,14 +389,14 @@ DEFAULT_BROWSER_CFG = {
     "TYPING_MS": 80,
     "MOUSE_MS": 100,
     "PROXY_MODE": "fallback",
-    "FILTER_DISPOSABLE": True,
+    "FILTER_DISPOSABLE": filter_disposable,
     "FIRE_UP": True,
-    "USE_PROXIES": True,
-    "STEALTH": True,
+    "USE_PROXIES": use_proxies,
+    "STEALTH": stealth_mode,
     "FORCE_EN_US": True,
     "SCREENSHOT_FINAL": True,
     "ENABLE_DEBUG": True,
-    "RETRY_CLOUDFLARE": True,
+    "RETRY_CLOUDFLARE": retry_cloudflare,
     "WEBHOOK_URL": "",
     "CAPSOLVER_KEY": "",
 }
@@ -406,6 +414,10 @@ if st.sidebar.button("💾 Apply Settings", type="primary", use_container_width=
         "POOL_MODE": pool_mode,
         "COUNTRY_CODE": country_code.strip().upper(),
         "MIX_LIST": [c.strip().upper() for c in mix_list.split(",") if c.strip()],
+        "FILTER_DISPOSABLE": filter_disposable,
+        "USE_PROXIES": use_proxies,
+        "STEALTH": stealth_mode,
+        "RETRY_CLOUDFLARE": retry_cloudflare,
     })
     st.sidebar.success("Settings applied successfully!")
 
@@ -480,7 +492,6 @@ INBOX_MARKERS = (
 
 EMAIL_SEL = "input[type='email'], input[name='loginfmt'], input[name='login'], input[type='text']"
 PASS_SEL = "input[type='password'], input[name='passwd'], #i0118"
-RECOVERY_PWD = ["Use your password", "Use my password", "Use a password instead", "Sign in with password"]
 
 def sticky_idx(email, n):
     return int(hashlib.md5(email.lower().encode()).hexdigest(), 16) % n if n else 0
@@ -667,7 +678,8 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
 
                     try:
                         context = browser.new_context(**context_args)
-                        context.add_init_script(STEALTH_JS)
+                        if config.get("STEALTH", True):
+                            context.add_init_script(STEALTH_JS)
                         page = context.new_page()
 
                         loop = asyncio.new_event_loop()
@@ -707,7 +719,7 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
             st.session_state.engine_logs.append(f"🚨 Critical Engine Error: {str(e)}")
 
 # ==========================================
-# MAIN INTERFACE
+# MAIN INTERFACE TABS
 # ==========================================
 st.title("⚡ Mega Ultimate Public Email Checker")
 st.markdown("Custom URL Slug: `positive-public-email-checker.streamlit.app` — Powered by Advanced Proxy Filtering & Health Scoring.")
@@ -752,7 +764,7 @@ with tab_engine:
     with col_opt2:
         max_threads = st.number_input("Concurrent Threads", min_value=1, max_value=25, value=st.session_state.BROWSER_CFG.get("WORKERS", 3), key="eng_threads")
 
-    # Filtered active proxy pool integration
+    # Fetch and filter active proxy pool
     proxies_pool = get_filtered_active_proxies()
 
     c1, c2, c3 = st.columns(3)
