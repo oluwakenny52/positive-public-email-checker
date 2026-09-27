@@ -1,6 +1,7 @@
-streamlit==1.32.0
-folium==0.15.1
-streamlit-folium==0.15.2
-playwright==1.42.0
-requests==2.31.0
-pandas==2.2.1
+streamlit
+folium
+streamlit-folium
+requests
+pandas
+playwright
+
