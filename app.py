@@ -623,16 +623,19 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
     global worker_running
     worker_running = True
 
-    try:
-        from playwright.sync_api import sync_playwright
+    with results_lock:
+        global_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 Engine initialized. Preparing browser automation...")
+    sync_globals_to_session()
 
-        with results_lock:
-            global_logs.append(f"Engine launched for {len(accounts_list)} accounts with {max_workers} workers.")
-        sync_globals_to_session()
-
-        def worker_thread_task():
-            global worker_running
+    def worker_thread_task():
+        global worker_running
+        try:
+            from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
+                with results_lock:
+                    global_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🌐 Launching Chromium browser headlessly...")
+                sync_globals_to_session()
+
                 browser = p.chromium.launch(
                     headless=True,
                     args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-dev-shm-usage"]
@@ -669,6 +672,11 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
                         context_args["proxy"] = proxy_dict
 
                     try:
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        with results_lock:
+                            global_logs.append(f"[{timestamp}] 🔍 Checking: {email}")
+                        sync_globals_to_session()
+
                         context = browser.new_context(**context_args)
                         if config.get("STEALTH", True):
                             context.add_init_script(STEALTH_JS)
@@ -698,16 +706,17 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
                     time.sleep(1)
 
                 browser.close()
-                worker_running = False
-                sync_globals_to_session()
+        except Exception as e:
+            with results_lock:
+                global_logs.append(f"🚨 Thread Execution Error: {str(e)}")
+        finally:
+            worker_running = False
+            with results_lock:
+                global_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 🛑 Engine execution finished.")
+            sync_globals_to_session()
 
-        t = threading.Thread(target=worker_thread_task, daemon=True)
-        t.start()
-    except Exception as e:
-        worker_running = False
-        with results_lock:
-            global_logs.append(f"🚨 Critical Engine Error: {str(e)}")
-        sync_globals_to_session()
+    t = threading.Thread(target=worker_thread_task, daemon=True)
+    t.start()
 
 # ==========================================
 # MAIN INTERFACE TABS
