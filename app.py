@@ -259,7 +259,7 @@ def test_one(proxy_str):
             if proxy_str not in proxy_meta:
                 proxy_meta[proxy_str] = {"fails": 0, "success": 0, "country": "US"}
             proxy_meta[proxy_str]["fails"] = proxy_meta[proxy_str].get("fails", 0) + 1
-            proxy_meta[proxy_str]["score"] = 0  # Timed out / failed proxies get 0 score immediately
+            proxy_meta[proxy_str]["score"] = 0
         save_proxy_meta()
         return (proxy_str, False, 0, "-", "-")
 
@@ -336,7 +336,7 @@ def send_telegram_alert(message):
         pass
 
 # ==========================================
-# ORGANIZED SIDEBAR & EXPANDERS
+# ORGANIZED SIDEBAR & CORRECTED EXPANDERS
 # ==========================================
 st.sidebar.title("🎛️ Engine Control Panel")
 
@@ -413,22 +413,35 @@ with col_p1:
 with col_p2:
     st.markdown(f"**Alive:** {st.session_state.proxy_stats.get('alive', 0)}")
 
+with st.sidebar.expander("➕ Add Custom Proxies", expanded=False):
+    custom_proxies_input = st.text_area("Paste proxies (IP:Port:User:Pass)", placeholder="192.168.1.1:8080:user:pass", key="custom_proxies_box")
+    if st.button("Append Custom Proxies", use_container_width=True):
+        if custom_proxies_input.strip():
+            current = st.session_state.fetched_proxies.strip()
+            new_combined = (current + "\n" + custom_proxies_input).strip() if current else custom_proxies_input.strip()
+            st.session_state.fetched_proxies = new_combined
+            st.sidebar.success("Appended custom proxies successfully!")
+
 if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", use_container_width=True):
     log_action("Clicked 'Fetch & Test All Proxies'")
-    with st.spinner("Scraping Webshare API & Oxylabs list... testing proxy health & timeouts..."):
+    with st.spinner("Scraping Webshare API & Oxylabs list... testing proxy health..."):
         try:
             all_raw = []
-            country_counts = {}
-            alive_count, dead_count = 0, 0
+            webshare_success_count = 0
 
-            for key in WEBSHARE_KEYS:
+            for i, key in enumerate(WEBSHARE_KEYS, 1):
                 lst = load_webshare(key)
-                all_raw.extend(lst)
+                if lst:
+                    webshare_success_count += len(lst)
+                    all_raw.extend(lst)
+
             for ox in OXYLABS_PROXIES:
                 all_raw.append(ox)
             
             all_raw = list(dict.fromkeys(all_raw))
             alive = []
+            country_counts = {}
+            alive_count, dead_count = 0, 0
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_TEST_WORKERS) as ex:
                 futures = {ex.submit(test_one, p): p for p in all_raw}
@@ -443,13 +456,14 @@ if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", use_contai
                         
             st.session_state.fetched_proxies = "\n".join(alive)
             st.session_state.proxy_stats = {"total": len(all_raw), "alive": alive_count, "dead": dead_count, "countries": country_counts}
-            st.sidebar.success(f"Successfully cached {alive_count} live proxies!")
+            
+            st.sidebar.success(f"Webshare: {webshare_success_count} | Oxylabs: {len(OXYLABS_PROXIES)} | Alive: {alive_count}")
             st.rerun()
         except Exception as e:
             st.sidebar.error(f"Proxy fetch error: {str(e)}")
 
 # ==========================================
-# MULTI-PROVIDER AUTOMATION ENGINE (MS & PUBLIC MAIL)
+# MULTI-PROVIDER AUTOMATION ENGINE
 # ==========================================
 INBOX_MARKERS = (
     "new mail", "inbox", "focused", "deleted items", "junk email",
@@ -529,7 +543,6 @@ async def read_screen(page):
 async def execute_login_flow(page, email, password, provider, config):
     domain = email.split("@")[-1].lower()
     
-    # Provider Routing Selection
     if "gmail" in domain or "google" in provider.lower():
         login_url = "https://accounts.google.com/"
         email_sel = "input[type='email']"
@@ -538,7 +551,7 @@ async def execute_login_flow(page, email, password, provider, config):
         login_url = "https://login.yahoo.com/"
         email_sel = "input[name='username']"
         pass_sel = "input[name='password']"
-    else:  # Default Microsoft / Outlook / Live Flow
+    else:
         login_url = "https://login.live.com/"
         email_sel = "input[type='email'], input[name='loginfmt']"
         pass_sel = "input[type='password'], input[name='passwd']"
