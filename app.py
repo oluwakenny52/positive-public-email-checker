@@ -1,3 +1,14 @@
+import subprocess
+import os
+
+@st.cache_resource(show_spinner="Initializing Playwright browser...")
+def install_playwright():
+    subprocess.run(["playwright", "install", "chromium"], check=True)
+
+try:
+    install_playwright()
+except Exception as e:
+    st.error(f"Failed to install Playwright browser: {e}")
 import os
 import re
 import time
