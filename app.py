@@ -1,7 +1,7 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v1.6
-# DESCRIPTION: Microsoft Account Sentinel Engine - Ultimate Enterprise Suite & Vault Scraper
+# VERSION: v1.7
+# DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface & Bot Rewrite Decoder Suite
 # ==========================================================
 
 import streamlit as st
@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- CUSTOM THEME STYLING ---
+# --- CUSTOM THEME STYLING (BobitoMail Dark Theme) ---
 st.markdown("""
 <style>
     .main {
@@ -39,12 +39,25 @@ st.markdown("""
         font-family: monospace;
         font-size: 13px;
     }
-    .email-item {
+    .mail-item {
         background-color: #161b22;
         border: 1px solid #30363d;
-        padding: 10px;
+        padding: 12px;
         border-radius: 6px;
         margin-bottom: 8px;
+        cursor: pointer;
+    }
+    .mail-item:hover {
+        border-color: #58a6ff;
+    }
+    .decoder-box {
+        background-color: #111418;
+        border: 1px solid #f85149;
+        padding: 15px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 12px;
+        color: #f0f6fc;
     }
     .stButton button {
         border-radius: 6px;
@@ -72,13 +85,15 @@ if "proxy_table_data" not in st.session_state:
 
 if "live_sessions" not in st.session_state:
     st.session_state.live_sessions = [
-        "user_sample_01@outlook.com",
-        "verified_acc_02@hotmail.com",
-        "enterprise_test_03@live.com"
+        "ishad.satyen@outlook.com",
+        "zohaib@hotmail.com",
+        "wlicheng@allyun.com",
+        "gottarace30@frontiernet.net",
+        "derose7@outlook.com"
     ]
 
 # ==========================================
-# SIDEBAR CONTROL PANEL (COMPLETE v1.6 SUITE)
+# SIDEBAR CONTROL PANEL (COMPLETE v1.7 SUITE)
 # ==========================================
 st.sidebar.title("🎛️ Microsoft Sentinel Panel")
 st.sidebar.markdown("Focused Exclusively on Microsoft Accounts (`login.live.com`).")
@@ -179,7 +194,7 @@ col_p1, col_p2 = st.sidebar.columns(2)
 with col_p1:
     st.sidebar.markdown("**Loaded:** 0")
 with col_p2:
-    st.sidebar.markdown("**Alive:** 4")
+    st.sidebar.markdown("**Alive:** 5")
 
 with st.sidebar.expander("➕ Add Custom Proxies", expanded=False):
     st.text_area("Paste proxies (IP:Port:User:Pass)", placeholder="192.168.1.1:8080:user:pass", key="custom_proxies_box")
@@ -198,14 +213,13 @@ st.markdown("Enterprise-grade validation framework optimized strictly for Micros
 tab_engine, tab_proxies, tab_terminal, tab_vault, tab_debug, tab_auditor = st.tabs([
     "🚀 Engine Runner", 
     "🌐 Proxy Manager",
-    "💻 Terminal Remote",
+    "💻 BobitoMail Remote",
     "🔑 Vault Scrape",
     "🔍 Debug Viewer",
     "🧪 Functionality Auditor"
 ])
 
 with tab_engine:
-    # Metrics Overview Row
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.markdown("""<div class="metric-container"><h4>Total Loaded</h4><h2>0</h2></div>""", unsafe_allow_html=True)
@@ -218,10 +232,7 @@ with tab_engine:
 
     st.markdown("---")
 
-    # Interactive Global Proxy & Traffic Map
     st.subheader("🌍 Interactive Global Node & Traffic Map")
-    st.markdown("Real-time geographic distribution of active proxy nodes routing your Microsoft verification requests.")
-
     m = folium.Map(location=[20.0, 0.0], zoom_start=2, tiles="OpenStreetMap")
     for node in st.session_state.proxy_nodes:
         color = "green" if node["status"] == "Active" else "red"
@@ -239,9 +250,7 @@ with tab_engine:
     st_folium(m, height=400, use_container_width=True)
     st.markdown("---")
 
-    # Batch Input & Account Filter Section
     st.subheader("📥 Microsoft Account Batch Input & Domain Filter")
-    
     col_filter1, col_filter2 = st.columns(2)
     with col_filter1:
         account_filter_mode = st.selectbox(
@@ -261,7 +270,6 @@ with tab_engine:
         st.markdown("**Upload Combo Text File**")
         st.file_uploader("Upload .txt combo file", type=["txt"], label_visibility="collapsed")
 
-    # Manual Single Account Login Interface
     with st.expander("👤 Manual Single Account Login (Custom UI Engine)", expanded=False):
         st.markdown("Inject and execute a manual login run directly through our engine interface.")
         man_col1, man_col2, man_btn = st.columns([2, 2, 1])
@@ -292,142 +300,126 @@ with tab_engine:
     if clear_logs:
         st.success("UI Shell Test: Logs cleared.")
 
-    # Live Engine Loading Progress Bar
     st.markdown("### 📈 Engine Execution Progress")
     engine_progress = st.progress(0, text="Engine idle. Ready to launch checks.")
 
-    # Export Button Placeholders
     st.markdown("### 📥 Flexible Export Format Options")
     col_exp1, col_exp2, col_exp3 = st.columns(3)
     with col_exp1:
-        st.download_button(
-            label="💾 Working Hits (TXT)",
-            data="user@outlook.com:Pass123\n",
-            file_name="microsoft_hits.txt",
-            mime="text/plain",
-            use_container_width=True
-        )
+        st.download_button("💾 Working Hits (TXT)", data="user@outlook.com:Pass123\n", file_name="microsoft_hits.txt", use_container_width=True)
     with col_exp2:
-        st.download_button(
-            label="💾 Checkpoints / Captcha",
-            data="user@outlook.com:Pass123\n",
-            file_name="microsoft_checkpoints.txt",
-            mime="text/plain",
-            use_container_width=True
-        )
+        st.download_button("💾 Checkpoints / Captcha", data="user@outlook.com:Pass123\n", file_name="microsoft_checkpoints.txt", use_container_width=True)
     with col_exp3:
-        st.download_button(
-            label="💾 Full Session JSON",
-            data="{\"sessions\": []}\n",
-            file_name="session_report.json",
-            mime="application/json",
-            use_container_width=True
-        )
+        st.download_button("💾 Full Session JSON", data="{\"sessions\": []}\n", file_name="session_report.json", use_container_width=True)
 
     st.markdown("### **📊 Live Execution Log Viewer**")
-    st.code("[15:14:34] 🚀 UI Shell v1.6 initialized successfully. All modules active.", language="text")
+    st.code("[15:14:34] 🚀 UI Shell v1.7 initialized successfully. All modules active.", language="text")
 
 with tab_proxies:
     st.subheader("🌐 Live Proxy Pool & Infrastructure Manager")
-    st.markdown("Inspect, filter, and manage your active proxy rotation pool with parallel health checks.")
-
     st.dataframe(st.session_state.proxy_table_data, use_container_width=True)
 
     col_px1, col_px2, col_px3 = st.columns(3)
     with col_px1:
         if st.button("⚡ Run Parallel Health Test", type="primary", use_container_width=True):
-            st.success("Parallel proxy health check completed (Alive check, latency, score verified)!")
+            st.success("Parallel proxy health check completed!")
     with col_px2:
         if st.button("🧹 Clear Dead Proxies", use_container_width=True):
-            st.warning("Dead proxies flushed from rotation pool.")
+            st.warning("Dead proxies flushed.")
     with col_px3:
-        st.download_button(
-            label="📥 Export Active Proxies",
-            data="192.168.1.10:8080\n172.16.25.4:3128\n",
-            file_name="active_proxies.txt",
-            mime="text/plain",
-            use_container_width=True
-        )
+        st.download_button("📥 Export Active Proxies", data="192.168.1.10:8080\n", file_name="active_proxies.txt", use_container_width=True)
 
 with tab_terminal:
-    st.subheader("💻 Simulated Outlook Mailbox & LIVE_MS_SESSIONS Terminal")
-    st.markdown("Mimics real Outlook mailbox web interface for captured valid accounts with full export and session restore capabilities.")
-
-    # Session Selector & Status Bar
-    col_tm1, col_tm2, col_tm3 = st.columns([2, 1, 1])
-    with col_tm1:
-        selected_session = st.selectbox("Select Valid Account (LIVE_MS_SESSIONS)", options=st.session_state.live_sessions)
-    with col_tm2:
-        st.markdown("**Status Line:**")
-        st.markdown("🟢 `RUNNING`")
-    with col_tm3:
-        if st.button("🔄 Restore Session", use_container_width=True):
-            st.success(f"Restored session for {selected_session} without full re-login!")
-
-    st.markdown("---")
-
-    # Mailbox Folder Navigation Buttons
-    f_col1, f_col2, f_col3, f_col4, f_col5, f_col6 = st.columns(6)
-    with f_col1:
-        btn_inbox = st.button("📥 Inbox", use_container_width=True)
-    with f_col2:
-        btn_sent = st.button("📤 Sent", use_container_width=True)
-    with f_col3:
-        btn_drafts = st.button("📝 Drafts", use_container_width=True)
-    with f_col4:
-        btn_junk = st.button("⚠️ Junk", use_container_width=True)
-    with f_col5:
-        btn_deleted = st.button("🗑️ Deleted", use_container_width=True)
-    with f_col6:
-        btn_archive = st.button("📦 Archive", use_container_width=True)
-
-    # Mailbox Control Bar
-    m_ctrl1, m_ctrl2, m_ctrl3 = st.columns([2, 2, 2])
-    with m_ctrl1:
-        reload_inbox = st.button("🔄 Load / Reload Inbox (Large Inbox Ready)", type="primary", use_container_width=True)
-    with m_ctrl2:
-        watch_btn = st.button("👁️ Watch (Timed Re-Check)", use_container_width=True)
-    with m_ctrl3:
-        auto_reload_toggle = st.toggle("Auto-Reload Interval (10s)", value=False)
-
-    st.markdown("---")
-
-    # Mailbox Messages Stream View
-    st.markdown(f"### 🗂️ Mailbox Feed: `{selected_session}`")
+    # --- BOBITOMAIL ULTIMATE LAYOUT ---
+    st.subheader("✉️ BobitoMail Pro — Multi-Account Inbox & Bot Decoder Suite")
     
-    st.markdown("""
-    <div class="email-item">
-        <b>From:</b> Microsoft account team &lt;account-security-noreply@account.microsoft.com&gt;<br>
-        <b>Subject:</b> Security info verification code<br>
-        <b>Snippet:</b> Your security code is: <b>892341</b>. Use this code to finish verifying your account...<br>
-        <span style='color: #8b949e; font-size: 11px;'>Received: 2 mins ago | Folder: Inbox</span>
-    </div>
-    <div class="email-item">
-        <b>From:</b> Outlook Team &lt;welcome@e.outlook.com&gt;<br>
-        <b>Subject:</b> Welcome to your new Outlook.com inbox<br>
-        <b>Snippet:</b> Get the mobile app, customize your inbox theme, and sync your calendar effortlessly...<br>
-        <span style='color: #8b949e; font-size: 11px;'>Received: 1 hour ago | Folder: Inbox</span>
-    </div>
-    """, unsafe_allow_html=True)
+    # Top Search & Action Bar
+    srch_col, act_col1, act_col2, act_col3 = st.columns([4, 1, 1, 1])
+    with srch_col:
+        mail_search = st.text_input("Search across messages...", placeholder="🔍 Search sender, subject or keyword...", label_visibility="collapsed")
+    with act_col1:
+        if st.button("🔄 Sync", use_container_width=True):
+            st.toast("Syncing IMAP folders...")
+    with act_col2:
+        if st.button("📥 Export", use_container_width=True):
+            st.toast("Exporting mail bundle...")
+    with act_col3:
+        if st.button("⚙️ Settings", use_container_width=True):
+            st.toast("Mail client preferences opened.")
 
     st.markdown("---")
-    st.markdown("### 📤 Terminal Export & Marking Options")
-    exp_t1, exp_t2, exp_t3 = st.columns(3)
-    with exp_t1:
-        st.download_button("💾 Mark & Download Valids", data=selected_session, file_name="marked_valids.txt", use_container_width=True)
-    with exp_t2:
-        st.download_button("💾 Mark & Download Invalids", data="invalid_sample@outlook.com", file_name="marked_invalids.txt", use_container_width=True)
-    with exp_t3:
-        st.download_button("💾 Export Folder / Server Notes", data="Notes: Inbox loaded cleanly.", file_name="folder_notes.txt", use_container_width=True)
 
-    st.markdown("---")
-    st.markdown("**Action Log Output:**")
-    st.code("[15:14:34] [MAILBOX] Status: Started | Elapsed: 00:04:12 | Fetched messages cleanly with pagination handler.", language="text")
+    # Layout Split: Sidebar Accounts Tree & Message Feed
+    tree_col, feed_col = st.columns([1, 2.5])
+
+    with tree_col:
+        st.markdown("### 📂 ACCOUNTS")
+        selected_account = st.radio(
+            "Account Switcher",
+            options=st.session_state.live_sessions,
+            label_visibility="collapsed"
+        )
+        
+        st.markdown("---")
+        st.markdown("**Folders:**")
+        folder_choice = st.radio(
+            "Folder Tree",
+            options=["📥 INBOX (60)", "📤 Sent", "📝 Draft", "⚠️ Trash (191)", "📦 Bulk (316)", "📁 Archive (61)"],
+            label_visibility="collapsed"
+        )
+        
+        st.markdown("---")
+        if st.button("🔄 Restore Session State", use_container_width=True):
+            st.success(f"Restored session for {selected_account}!")
+
+    with feed_col:
+        st.markdown(f"### 🗂️ FEED — `{selected_account}` ({folder_choice})")
+        
+        # Interactive Message Item 1 (Simulating Bot Rewrite / Cloud Wrapper)
+        st.markdown("""
+        <div class="mail-item">
+            <b>☁️ [hotmailerr_bot] Security Alert: Please Open (hotmailerr_bot)</b><br>
+            <span style='color: #8b949e; font-size: 13px;'>Temu &lt;email@news.temuemail.com&gt; | 27 Sep 2026, 21:16 UTC</span><br>
+            <p style='margin: 5px 0 0 0; font-size: 13px; color: #f85149;'>🔒 <b>This mail was moved to your Cloud Lounge. Original content is locked behind Premium Cloud...</b></p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.expander("🛠️ Bot Rewrite & Fake Content Decoder (Inspect Source)", expanded=True):
+            st.markdown("Our decoder engine detected a bot wrapper rewrite or fake content mask. Decoded source parameters below:")
+            st.markdown("""
+            <div class="decoder-box">
+            <b>[DECODER TELEMETRY REPORT]</b><br>
+            - Wrapper Type: Cloud Lounge / Bot Mask v3.2<br>
+            - True Sender IP: 185.199.108.153 (Verified Microsoft Relay)<br>
+            - Original Subject: <i>Your Amazon Web Services Password Has Been Updated</i><br>
+            - Raw MIME Header Hash: <code>[MENC2:NlIzRsF5bdfZeWe2uuqr1ZyTUTReaUWUXuS]</code><br>
+            - Status: 🟢 Successfully bypassed bot rewrite wrapper and extracted raw text payload.
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("📥 Download Raw Email Source Code (.eml)", use_container_width=True):
+                st.success("Raw source code file compiled and downloaded.")
+
+        # Interactive Message Item 2
+        st.markdown("""
+        <div class="mail-item">
+            <b>🔑 Your Amazon Web Services Password Has Been Updated</b><br>
+            <span style='color: #8b949e; font-size: 13px;'>gottarace30 • IMAP | 27 Sep 2026, 7:44 PM</span><br>
+            <p style='margin: 5px 0 0 0; font-size: 13px;'>Greetings from Amazon Web Services, As you requested, your AWS account password has been updated...</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("---")
+        exp_t1, exp_t2, exp_t3 = st.columns(3)
+        with exp_t1:
+            st.download_button("💾 Mark & Download Valids", data=selected_account, file_name="marked_valids.txt", use_container_width=True)
+        with exp_t2:
+            st.download_button("💾 Mark & Download Invalids", data="invalid_sample@outlook.com", file_name="marked_invalids.txt", use_container_width=True)
+        with exp_t3:
+            st.download_button("💾 Export Folder Notes", data="Notes: Clean sync.", file_name="folder_notes.txt", use_container_width=True)
 
 with tab_vault:
     st.subheader("🔑 Microsoft Saved Passwords Vault Scrape")
-    st.markdown("Extract and decrypt saved Microsoft credentials directly from local browser credential vaults (Chrome / Edge).")
-
     vault_col1, vault_col2 = st.columns(2)
     with vault_col1:
         browser_target = st.selectbox("Select Target Browser Profile", options=["Google Chrome (Default)", "Microsoft Edge (Default)", "Custom User Data Directory"])
@@ -452,8 +444,6 @@ with tab_vault:
 
 with tab_debug:
     st.subheader("🔍 Advanced Debug Viewer & Screen Dumps")
-    st.markdown("Inspect verbose protocol path logs, thread traces, and headless browser screen snapshots.")
-
     st.markdown("### 🩺 Automated Error Diagnose Block")
     st.markdown("""
     <div class="diagnostic-box">
@@ -464,35 +454,15 @@ with tab_debug:
     - Last Error Captured: None recorded in current run buffer.
     </div>
     """, unsafe_allow_html=True)
-
-    st.markdown("### 🖥️ Headless Browser Screen Dumps")
-    st.info("No screen dumps recorded yet. Dumps will automatically populate here upon encountering security checkpoints or validation failures.")
-
     st.markdown("### 📜 Verbose Protocol Path Logs")
-    st.code("""
-[15:14:34] [VERBOSE] Initializing Playwright context with UA pool rotation...
-[15:14:35] [VERBOSE] Preflight test passed against login.live.com via proxy 192.168.1.10:8080 (42ms)
-[15:14:36] [VERBOSE] Navigating to https://login.live.com/ ...
-[15:14:37] [VERBOSE] Neutral warm-up site sequence successfully completed.
-    """, language="text")
+    st.code("[15:14:34] [VERBOSE] Initializing BobitoMail IMAP multi-account socket streams...", language="text")
 
 with tab_auditor:
     st.subheader("🧪 Functionality & State Auditor")
-    st.markdown("Real-time telemetry log tracking whether frontend buttons, sliders, and controls successfully dispatch their functions.")
-
     st.markdown("""
     | Control Name | Type | Target Function | Last Trigger Status |
     | :--- | :--- | :--- | :--- |
-    | **Workers Slider** | Slider | Spawns parallel Playwright instances | 🟢 Active (`Value: 5`) |
-    | **Proxy Routing** | Checkbox | Routes traffic through proxy pool | 🟢 Enabled (`True`) |
-    | **Fire-up on Fail** | Checkbox | Clears cookies/tab on invalid check | 🟢 Enabled (`True`) |
+    | **BobitoMail Tree** | UI Component | Multi-account sidebar folder tree | 🟢 Active |
+    | **Bot Decoder** | Engine Parser| Strips bot wrappers & extracts source | 🟢 Online (`Ready`) |
     | **Vault Scraper** | Tab Module | Local browser credential extraction | 🟢 Standby (`Ready`) |
-    | **Mailbox Watcher** | Button | Triggers timed re-check on inbox | 🟢 Ready (`Standby`) |
     """)
-
-    st.markdown("### 📊 Auditor System Telemetry Log")
-    st.code("""
-[15:14:34] [AUDITOR] State initialization verified. All UI controls bound successfully.
-[15:14:35] [AUDITOR] Vault Scraper and Session Restore hooks registered.
-[15:14:36] [AUDITOR] Mailbox reader service linked to LIVE_MS_SESSIONS buffer.
-    """, language="text")
