@@ -1,6 +1,6 @@
 # ==========================================================
 # FILE: engine_core.py
-# VERSION: v1.0 (Phase 2 - Asynchronous Protocol & Proxy Engine)
+# VERSION: v1.1 (Phase 2 - Asynchronous Account Authentication & Batch Routing)
 # DESCRIPTION: Core HTTP validation and routing engine for Microsoft accounts.
 # ==========================================================
 
@@ -69,7 +69,7 @@ async def batch_test_proxies(proxy_list: list, timeout: int = 10) -> list:
     tasks = [test_single_proxy(p, timeout) for p in proxy_list]
     results = await asyncio.gather(*tasks)
     return results
-    
+
 async def check_single_account(combo: str, proxy_url: str = None, timeout: int = 15) -> dict:
     """
     Asynchronously validates a single Microsoft account combo (email:password)
