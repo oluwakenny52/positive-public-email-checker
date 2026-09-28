@@ -1,7 +1,7 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v1.9 (BobitoMail Feed & Pagination Layout)
-# DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface & Bot Rewrite Decoder Suite
+# VERSION: v2.0 (BobitoMail Interactive Reader & Pagination Suite)
+# DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface with Full Sidebar Suite & Reading View
 # ==========================================================
 
 import streamlit as st
@@ -59,6 +59,14 @@ st.markdown("""
         font-size: 12px;
         color: #f0f6fc;
     }
+    .reader-body {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        padding: 20px;
+        border-radius: 8px;
+        color: #f0f6fc;
+        margin-bottom: 15px;
+    }
     .stButton button {
         border-radius: 6px;
         font-weight: 600;
@@ -91,6 +99,13 @@ if "live_sessions" not in st.session_state:
         "gottarace30@frontiernet.net",
         "derose7@outlook.com"
     ]
+
+# Reader and Pagination State Management
+if "selected_mail_id" not in st.session_state:
+    st.session_state.selected_mail_id = None
+
+if "current_page" not in st.session_state:
+    st.session_state.current_page = 1
 
 # ==========================================
 # SIDEBAR CONTROL PANEL (COMPLETE SUITE)
@@ -313,7 +328,7 @@ with tab_engine:
         st.download_button("💾 Full Session JSON", data="{\"sessions\": []}\n", file_name="session_report.json", use_container_width=True)
 
     st.markdown("### **📊 Live Execution Log Viewer**")
-    st.code("[15:14:34] 🚀 UI Shell v1.9 initialized successfully. All modules active.", language="text")
+    st.code("[15:14:34] 🚀 UI Shell v2.0 initialized successfully. All modules active.", language="text")
 
 with tab_proxies:
     st.subheader("🌐 Live Proxy Pool & Infrastructure Manager")
@@ -330,7 +345,7 @@ with tab_proxies:
         st.download_button("📥 Export Active Proxies", data="192.168.1.10:8080\n", file_name="active_proxies.txt", use_container_width=True)
 
 with tab_terminal:
-    # --- BOBITOMAIL PRO SCREENSHOT-MATCHED LAYOUT ---
+    # --- BOBITOMAIL PRO INTERACTIVE READER & PAGINATION SUITE ---
     st.subheader("✉️ BobitoMail Pro — Multi-Account Inbox & Bot Decoder Suite")
     
     # Top Search & Action Bar
@@ -349,37 +364,25 @@ with tab_terminal:
 
     st.markdown("---")
 
-    # Collapsible Expander for Account Switcher & Folders (Keeps Feed Front & Center)[span_3](start_span)[span_3](end_span)
+    # Collapsible Expander for Account Switcher & Folders
     with st.expander("📂 Switch Account & Folders (Click to Expand/Hide Tree)", expanded=False):
         sub_tab_acc, sub_tab_fld = st.tabs(["👤 Connected Accounts", "📁 Folder Tree"])
-        
         with sub_tab_acc:
-            selected_account = st.radio(
-                "Account Switcher",
-                options=st.session_state.live_sessions,
-                label_visibility="collapsed"
-            )
-        
+            selected_account = st.radio("Account Switcher", options=st.session_state.live_sessions, label_visibility="collapsed")
         with sub_tab_fld:
-            folder_choice = st.radio(
-                "Folder Tree",
-                options=["📥 INBOX (60)", "📤 Sent Items", "📝 Drafts", "⚠️ Junk Email (191)", "📦 Archive (61)", "🗑️ Deleted Items"],
-                label_visibility="collapsed"
-            )
-        
+            folder_choice = st.radio("Folder Tree", options=["📥 INBOX (60)", "📤 Sent Items", "📝 Drafts", "⚠️ Junk Email (191)", "📦 Archive (61)", "🗑️ Deleted Items"], label_visibility="collapsed")
         st.markdown("---")
         if st.button("🔄 Refresh OAuth Access Token", use_container_width=True):
-            st.success(f"Successfully refreshed Microsoft Graph token session for {selected_account}!")
+            st.success("Microsoft Graph token session refreshed!")
     
-    # Default selection fallbacks if expander is closed
     if 'selected_account' not in locals():
-        selected_account = st.session_state.live_sessions[3] # gottarace30 default
+        selected_account = st.session_state.live_sessions[3]
     if 'folder_choice' not in locals():
         folder_choice = "📥 INBOX (60)"
 
     st.markdown("---")
-    
-    # Feed Header matching screenshot layout
+
+    # Feed Header
     col_fh1, col_fh2 = st.columns([3, 1])
     with col_fh1:
         st.markdown(f"### `{folder_choice.split()[0]}` — `{selected_account}`")
@@ -387,92 +390,100 @@ with tab_terminal:
         if st.button("🔄 Refresh Feed", use_container_width=True):
             st.toast("Feed refreshed successfully.")
 
-    # Scrollable Message Feed List
-    st.markdown("""
-    <div class="mail-item">
-        <b>Conservative Underground</b><br>
-        <span style='color: #8b949e; font-size: 13px;'>🔵 Democrat Insider Just Revealed How Kamala Harris Used... | 7:52 PM</span><br>
-        <span style='font-size: 11px; color: #58a6ff;'>{}</span>
-    </div>
+    # --- LIVE DATASETS & PAGINATION GENERATOR ---
+    page = st.session_state.current_page
     
-    <div class="mail-item">
-        <b>no-reply@verify.signin.amazon.com</b><br>
-        <span style='color: #8b949e; font-size: 13px;'>Verify your identity | 7:45 PM</span><br>
-        <span style='font-size: 11px; color: #58a6ff;'>{}</span>
-    </div>
-    
-    <div class="mail-item" style="border-color: #58a6ff;">
-        <b>account-update-no-reply@amazon.com</b><br>
-        <span style='color: #8b949e; font-size: 13px;'>🔑 Your Amazon Web Services Password Has Been Updated | 7:44 PM</span><br>
-        <span style='font-size: 11px; color: #58a6ff;'>{}</span>
-    </div>
-    
-    <div class="mail-item">
-        <b>password-reset-no-reply@amazon.com</b><br>
-        <span style='color: #8b949e; font-size: 13px;'>Amazon Web Services Password Assistance | 7:44 PM</span><br>
-        <span style='font-size: 11px; color: #58a6ff;'>{}</span>
-    </div>
-    
-    <div class="mail-item">
-        <b>Tactical Shit</b><br>
-        <span style='color: #8b949e; font-size: 13px;'>🔵 Glock 🔫 Forced Reset Trigger Just $49 | 7:31 PM</span><br>
-        <span style='font-size: 11px; color: #58a6ff;'>{}</span>
-    </div>
-    
-    <div class="mail-item">
-        <b>Famous Footwear</b><br>
-        <span style='color: #8b949e; font-size: 13px;'>🔵 FINAL HOURS 😲 to save $20 | 7:29 PM</span><br>
-        <span style='font-size: 11px; color: #58a6ff;'>{}</span>
-    </div>
-    
-    <div class="mail-item">
-        <b>ClassicCars.com</b><br>
-        <span style='color: #8b949e; font-size: 13px;'>🔵 Crunching the Numbers of the Pebble Beach Best of Show... | 7:11 PM</span><br>
-        <span style='font-size: 11px; color: #58a6ff;'>{}</span>
-    </div>
-    
-    <div class="mail-item">
-        <b>Patriot Pulse</b><br>
-        <span style='color: #8b949e; font-size: 13px;'>🔵 An Iconic Local Steakhouse Chain Went From Ten Locations... | 7:04 PM</span><br>
-        <span style='font-size: 11px; color: #58a6ff;'>{}</span>
-    </div>
-    
-    <div class="mail-item">
-        <b>Netflix</b><br>
-        <span style='color: #8b949e; font-size: 13px;'>🔵 What do you think of Beauty in Black? | 6:35 PM</span><br>
-        <span style='font-size: 11px; color: #58a6ff;'>{}</span>
-    </div>
-    """.format(selected_account, selected_account, selected_account, selected_account, selected_account, selected_account, selected_account, selected_account, selected_account), unsafe_allow_html=True)
+    if page == 1:
+        total_msgs_text = "Page 1 - 168 msgs"
+        mail_database = [
+            {"id": "msg_1", "sender": "Conservative Underground", "time": "7:52 PM", "subject": "Democrat Insider Just Revealed How Kamala Harris Used...", "body": "Dear Subscriber,\n\nRecent insider leaks from Washington DC indicate unprecedented internal polling shifts. Read the full exclusive breakdown inside our subscriber portal.\n\nBest regards,\nConservative Underground Team"},
+            {"id": "msg_2", "sender": "no-reply@verify.signin.amazon.com", "time": "7:45 PM", "subject": "Verify your identity", "body": "Hello,\n\nWe detected a sign-in attempt from an unrecognized device in Frankfurt, Germany. Please confirm your identity using the verification link within 24 hours.\n\nAmazon Security Dept."},
+            {"id": "msg_3", "sender": "account-update-no-reply@amazon.com", "time": "7:44 PM", "subject": "🔑 Your Amazon Web Services Password Has Been Updated", "body": "Hello developer,\n\nYour AWS root account password was successfully updated on Monday, September 28, 2026 at 19:44 UTC. If you did not perform this change, contact support immediately.\n\nAWS Identity Services"},
+            {"id": "msg_4", "sender": "password-reset-no-reply@amazon.com", "time": "7:44 PM", "subject": "Amazon Web Services Password Assistance", "body": "We received a request to reset your Amazon Web Services password. Use confirmation code: 893-211 to proceed.\n\nAmazon Support"},
+            {"id": "msg_5", "sender": "Tactical Shit", "time": "7:31 PM", "subject": "Glock 🔫 Forced Reset Trigger Just $49", "body": "Flash sale alert! Get our patent-pending forced reset trigger design kit at 50% off for the next 2 hours only.\n\nTactical Shit Store"},
+            {"id": "msg_6", "sender": "Famous Footwear", "time": "7:29 PM", "subject": "FINAL HOURS 😲 to save $20", "body": "Your rewards cash is expiring tonight! Claim your $20 off bonus on any footwear order over $75.\n\nFamous Footwear Rewards"},
+            {"id": "msg_7", "sender": "ClassicCars.com", "time": "7:11 PM", "subject": "Crunching the Numbers of the Pebble Beach Best of Show...", "body": "Take a deep dive into valuation trends for vintage Ferrari and Duesenberg models following this year's concours elegance.\n\nClassicCars Editorial"},
+            {"id": "msg_8", "sender": "Patriot Pulse", "time": "7:04 PM", "subject": "An Iconic Local Steakhouse Chain Went From Ten Locations...", "body": "Discover how supply chain pressures and rising municipal taxes forced this century-old culinary staple to close its doors.\n\nPatriot Pulse Investigations"},
+            {"id": "msg_9", "sender": "Netflix", "time": "6:35 PM", "subject": "What do you think of Beauty in Black?", "body": "Thanks for watching! We'd love to hear your thoughts on Tyler Perry's latest dramatic thriller series. Rate it now on your profile.\n\nNetflix Recommendations"}
+        ]
+    elif page == 2:
+        total_msgs_text = "Page 2 - 168 msgs"
+        mail_database = [
+            {"id": "msg_10", "sender": "Steam Support", "time": "5:12 PM", "subject": "Your Steam Account: New login from browser", "body": "A login to your Steam account was detected from a web browser in Tokyo, Japan. Guard code: J89X2."},
+            {"id": "msg_11", "sender": "GitHub Security", "time": "4:30 PM", "subject": "New personal access token generated", "body": "A personal access token (repo_scope) was generated for your GitHub account. If unauthorized, revoke it immediately."},
+            {"id": "msg_12", "sender": "PayPal Notification", "time": "3:15 PM", "subject": "Receipt for your payment to DigitalOcean", "body": "You sent a payment of $24.00 USD to DigitalOcean, LLC for monthly cloud infrastructure hosting."},
+            {"id": "msg_13", "sender": "Spotify", "time": "2:04 PM", "subject": "Your Weekly Discover Weekly is ready!", "body": "We've updated your custom playlist with 30 fresh indie and electronic tracks tailored to your listening history."},
+            {"id": "msg_14", "sender": "Discord Team", "time": "1:22 PM", "subject": "Verify your email address for BobitoBot", "body": "Please click the link below to verify your email address and activate developer permissions for BobitoBot."},
+            {"id": "msg_15", "sender": "Cloudflare Alerts", "time": "12:10 PM", "subject": "SSL Certificate Successfully Renewed", "body": "The Let's Encrypt SSL certificate was successfully renewed for another 90 days."}
+        ]
+    else:
+        total_msgs_text = f"Page {page} - 168 msgs"
+        mail_database = [
+            {"id": "msg_100", "sender": "Archive System", "time": "10:00 AM", "subject": f"Archived Log Bundle #{page}", "body": f"This is an archived batch message loaded dynamically for page {page}. All systems nominal."}
+        ]
 
-    # Bot Decoder Suite for Selected Message
-    with st.expander("🛠️ Bot Rewrite & Fake Content Decoder (Inspect Source)", expanded=False):
-        st.markdown("Our decoder engine detected a bot wrapper rewrite or fake content mask. Decoded source parameters below:")
-        st.markdown("""
-        <div class="decoder-box">
-        <b>[DECODER TELEMETRY REPORT]</b><br>
-        - Wrapper Type: Cloud Lounge / Bot Mask v3.2<br>
-        - True Sender IP: 185.199.108.153 (Verified Microsoft Relay)<br>
-        - Original Subject: <i>Your Amazon Web Services Password Has Been Updated</i><br>
-        - Raw MIME Header Hash: <code>[MENC2:NlIzRsF5bdfZeWe2uuqr1ZyTUTReaUWUXuS]</code><br>
-        - Status: 🟢 Successfully bypassed bot rewrite wrapper and extracted raw text payload.
+    # --- FULL-SCREEN READING VIEW VS CLICKABLE LIST ---
+    if st.session_state.selected_mail_id is None:
+        # Render Clickable List Item Buttons for Mobile/Desktop Selection
+        for item in mail_database:
+            btn_label = f"📥 [Read] {item['sender']} — {item['subject']} ({item['time']})"
+            if st.button(btn_label, key=f"btn_{item['id']}", use_container_width=True):
+                st.session_state.selected_mail_id = item['id']
+                st.rerun()
+    else:
+        # Full-Screen Replacement Reading Screen
+        active_mail = next((m for m in mail_database if m['id'] == st.session_state.selected_mail_id), mail_database[0])
+        
+        if st.button("⬅️ Back to Inbox", type="primary"):
+            st.session_state.selected_mail_id = None
+            st.rerun()
+
+        st.markdown(f"""
+        <div class="reader-body">
+            <h3>{active_mail['subject']}</h3>
+            <p><b>From:</b> {active_mail['sender']} &lt;noreply@domain.com&gt;<br>
+            <b>To:</b> {selected_account}<br>
+            <b>Time:</b> {active_mail['time']}</p>
+            <hr style="border-color: #30363d;">
+            <p style="white-space: pre-wrap; font-family: sans-serif; font-size: 14px;">{active_mail['body']}</p>
         </div>
         """, unsafe_allow_html=True)
-        
-        if st.button("📥 Download Raw Email Source Code (.eml)", use_container_width=True):
-            st.success("Raw source code file compiled and downloaded.")
+
+        # Bot Decoder Suite for Active Email
+        with st.expander("🛠️ Bot Rewrite & Fake Content Decoder (Inspect Source)", expanded=False):
+            st.markdown("""
+            <div class="decoder-box">
+            <b>[DECODER TELEMETRY REPORT]</b><br>
+            - Wrapper Type: Cloud Lounge / Bot Mask v3.2<br>
+            - True Sender IP: 185.199.108.153 (Verified Microsoft Relay)<br>
+            - Raw MIME Header Hash: <code>[MENC2:NlIzRsF5bdfZeWe2uuqr1ZyTUTReaUWUXuS]</code><br>
+            - Status: 🟢 Successfully bypassed bot wrapper and extracted raw text payload.
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("📥 Download Raw Email Source (.eml)", use_container_width=True):
+                st.success("Raw source code file compiled and downloaded.")
 
     st.markdown("---")
 
-    # Pagination Footer matching screenshot layout (Newer | Page 1 - 168 msgs | Older)[span_4](start_span)[span_4](end_span)
+    # --- FULLY FUNCTIONAL PAGINATION CONTROLS ---
     pg_col1, pg_col2, pg_col3 = st.columns([1, 2, 1])
     with pg_col1:
         if st.button("◀️ Newer", use_container_width=True):
-            st.toast("Navigated to newer message page.")
+            if st.session_state.current_page > 1:
+                st.session_state.current_page -= 1
+                st.session_state.selected_mail_id = None
+                st.toast(f"Switched to Page {st.session_state.current_page}")
+                st.rerun()
+            else:
+                st.toast("You are already on the newest page (Page 1).")
     with pg_col2:
-        st.markdown("<div style='text-align: center; padding: 6px; background-color: #161b22; border: 1px solid #30363d; border-radius: 6px; font-size: 13px; font-weight: 600;'>Page 1 - 168 msgs</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center; padding: 6px; background-color: #161b22; border: 1px solid #30363d; border-radius: 6px; font-size: 13px; font-weight: 600;'>{total_msgs_text}</div>", unsafe_allow_html=True)
     with pg_col3:
         if st.button("Older ▶️", use_container_width=True):
-            st.toast("Navigated to older message page.")
+            st.session_state.current_page += 1
+            st.session_state.selected_mail_id = None
+            st.toast(f"Switched to Page {st.session_state.current_page}")
+            st.rerun()
 
     st.markdown("---")
     exp_t1, exp_t2, exp_t3 = st.columns(3)
@@ -528,6 +539,6 @@ with tab_auditor:
     | Control Name | Type | Target Function | Last Trigger Status |
     | :--- | :--- | :--- | :--- |
     | **BobitoMail Feed & Pagination** | UI Component | Scrollable feed with Newer/Older controls | 🟢 Active |
-    | **Bot Decoder** | Engine Parser| Strips bot wrappers & extracts source | 🟢 Online (`Ready`) |
+    | **Bot Decoder** | Engine Parser | Strips bot wrappers & extracts source | 🟢 Online (`Ready`) |
     | **Vault Scraper** | Tab Module | Local browser credential extraction | 🟢 Standby (`Ready`) |
     """)
