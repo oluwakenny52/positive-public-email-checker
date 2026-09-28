@@ -1,6 +1,6 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v2.5 (BobitoMail Complete Suite - Fixes Streamlit Widget State Collision & Exact JSON Config View)
+# VERSION: v2.6 (BobitoMail Complete Suite - Added Sidebar Reset Success Notification)
 # DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface with Full Telemetry, Vault, Reading View, and Interactive Mailbox Actions
 # ==========================================================
 
@@ -301,11 +301,12 @@ with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
     st.markdown("**Telegram Chat ID:**")
     st.text_input("Telegram Chat ID", key="tg_chat_id", placeholder="-100xxxxxxxxxx", label_visibility="collapsed")
 
-# --- INSTANT RESET DEFAULTS HANDLER ---
+# --- INSTANT RESET DEFAULTS HANDLER WITH SUCCESS NOTIFICATION ---
 col_sb1, col_sb2 = st.sidebar.columns(2)
 with col_sb1:
     if st.button("🔄 Reset Defaults", use_container_width=True):
         st.session_state.reset_requested = True
+        st.sidebar.success("All settings reset successfully!")
         st.rerun()
 with col_sb2:
     if st.button("💾 Apply Settings", type="primary", use_container_width=True):
