@@ -1,6 +1,6 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v2.7 (BobitoMail Complete Suite - Persistent Reset Success Notification)
+# VERSION: v2.8 (BobitoMail Complete Suite - Live Engine Integration)
 # DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface with Full Telemetry, Vault, Reading View, and Interactive Mailbox Actions
 # ==========================================================
 
@@ -10,6 +10,8 @@ import folium
 from streamlit_folium import st_folium
 import pandas as pd
 from datetime import datetime
+import asyncio
+import engine_core  # <-- Backend asynchronous engine module
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -171,13 +173,15 @@ if "auto_sync_interval" not in st.session_state:
 if "decoder_sensitivity" not in st.session_state:
     st.session_state.decoder_sensitivity = True
 
+if "export_reports" not in st.session_state:
+    st.session_state.export_reports = {"hits_text": "", "checkpoints_text": "", "total_checked": 0, "total_hits": 0, "total_checkpoints": 0}
+
 # ==========================================
 # SIDEBAR CONTROL PANEL (SLIDE-OUT SUITE)
 # ==========================================
 st.sidebar.title("🎛️ Microsoft Sentinel Panel")
 st.sidebar.markdown("Focused Exclusively on Microsoft Accounts (`login.live.com`).")
 
-# 1. View Active Configuration State Tree View
 with st.sidebar.expander("🔍 View Active Configuration State", expanded=False):
     active_config_dict = {
         "MAX_WORKERS_START": st.session_state.get("workers", 10),
@@ -206,7 +210,6 @@ with st.sidebar.expander("🔍 View Active Configuration State", expanded=False)
     }
     st.json(active_config_dict)
 
-# 2. Proxy Management & Health block
 st.sidebar.markdown("""
 <div style="background-color: #161b22; border: 1px solid #30363d; padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 13px; color: #58a6ff; font-weight: 600;">
 🌐 Proxy Management & Health<br>
@@ -214,7 +217,6 @@ Loaded Proxies: 66 &nbsp;|&nbsp; Filtered Pool: 6
 </div>
 """, unsafe_allow_html=True)
 
-# 3. Drop down for Proxy Health & Geo Dashboard
 with st.sidebar.expander("📊 Proxy Health & Geo Dashboard"):
     st.markdown("<p style='font-size: 11px; color: #8b949e;'>Displaying IP Number, Country, Region, Score, Successful, Fails</p>", unsafe_allow_html=True)
     st.dataframe(st.session_state.proxy_table_data, use_container_width=True)
@@ -222,38 +224,28 @@ with st.sidebar.expander("📊 Proxy Health & Geo Dashboard"):
 with st.sidebar.expander("⚙️ Execution & Thread Settings", expanded=False):
     st.markdown("**Workers Start:**")
     st.slider("Workers Slider", min_value=1, max_value=50, key="workers", step=1, label_visibility="collapsed")
-
     st.markdown("**Deadline (s):**")
     st.slider("Deadline Slider", min_value=5, max_value=120, key="deadline", step=5, label_visibility="collapsed")
-
     st.markdown("**Max Accounts:**")
     st.slider("Max Accounts Slider", min_value=0, max_value=5000, key="max_acc", step=100, label_visibility="collapsed")
-
     st.markdown("**Delay Between Accounts (s):**")
     st.slider("Delay Between Accounts", min_value=0, max_value=15, key="delay_between_acc", step=1, label_visibility="collapsed")
 
 with st.sidebar.expander("🌐 Proxy Infrastructure & Routing", expanded=False):
     st.checkbox("Enable Proxy Routing", key="use_proxies")
     st.checkbox("Preflight Test Proxy against Live", key="preflight_test")
-
     st.markdown("**Proxy Protocol:**")
     st.selectbox("Proxy Protocol Select", options=["HTTP/HTTPS", "SOCKS5", "SOCKS4", "Mixed"], key="proxy_protocol", label_visibility="collapsed")
-
     st.markdown("**Rotation Strategy:**")
     st.selectbox("Rotation Strategy Select", options=["Sticky Session (Per Account)", "Round-Robin (Per Request)", "Static Pool"], key="rotation_strategy", label_visibility="collapsed")
-
     st.markdown("**Proxy Timeout (s):**")
     st.slider("Proxy Timeout Slider", min_value=2, max_value=30, key="proxy_timeout", step=1, label_visibility="collapsed")
-
     st.markdown("**Min Proxy Score:**")
     st.slider("Min proxy score Slider", min_value=0, max_value=100, key="min_proxy_score", step=5, label_visibility="collapsed")
-
     st.markdown("**Pool Mode:**")
     st.selectbox("Pool mode select", options=["us_only", "all", "country", "mix"], key="pool_mode", label_visibility="collapsed")
-
     st.markdown("**Country Code:**")
     st.text_input("Country code input", key="country_code", label_visibility="collapsed")
-
     st.markdown("**Mix List:**")
     st.text_input("Mix list input", key="mix_list", label_visibility="collapsed")
 
@@ -267,23 +259,18 @@ with st.sidebar.expander("🛡️ Stealth & Anti-Bot", expanded=False):
     st.checkbox("Device Pool (Rotate UA / Viewport)", key="device_pool")
     st.checkbox("Verbose Protocol Path Logs", key="debug_verbose")
     st.checkbox("Auto-Accept KMSI ('Stay signed in?')", key="auto_kmsi")
-
     st.markdown("**Speed Mode Preset:**")
     st.selectbox("Speed Preset", options=["slow", "normal", "fast", "superfast"], key="speed_preset", label_visibility="collapsed")
-
     st.markdown("**Typing Speed (ms/char):**")
     st.slider("Typing Speed", min_value=10, max_value=200, key="typing_speed", step=10, label_visibility="collapsed")
-
     st.markdown("**Mouse Move Delay (ms):**")
     st.slider("Mouse Delay", min_value=0, max_value=500, key="mouse_delay", step=25, label_visibility="collapsed")
 
 with st.sidebar.expander("⏱️ Throttling, Rest & Backoff", expanded=False):
     st.markdown("**Rest After Fail (s):**")
     st.slider("Rest After Fail", min_value=0, max_value=30, key="rest_fail", step=1, label_visibility="collapsed")
-
     st.markdown("**Rest After Success (s):**")
     st.slider("Rest After Success", min_value=0, max_value=30, key="rest_success", step=1, label_visibility="collapsed")
-
     st.checkbox("Filter Disposable Emails", key="filter_disposable")
     st.checkbox("Auto-Retry Security Challenges", key="retry_cloudflare")
     st.checkbox("🚨 Captcha Pause & Notify (Stop on Hit)", key="captcha_alert_stop")
@@ -294,10 +281,8 @@ with st.sidebar.expander("⏱️ Throttling, Rest & Backoff", expanded=False):
 with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
     st.markdown("**Webhook Endpoint URL:**")
     st.text_input("Webhook URL", key="webhook_url", placeholder="https://discord.com/api/webhooks/...", label_visibility="collapsed")
-
     st.markdown("**Telegram Bot Token:**")
     st.text_input("Telegram Token", key="tg_token", placeholder="123456:ABC-DEF...", type="password", label_visibility="collapsed")
-
     st.markdown("**Telegram Chat ID:**")
     st.text_input("Telegram Chat ID", key="tg_chat_id", placeholder="-100xxxxxxxxxx", label_visibility="collapsed")
 
@@ -350,15 +335,19 @@ tab_engine, tab_proxies, tab_terminal, tab_vault, tab_debug, tab_auditor = st.ta
 ])
 
 with tab_engine:
+    total_checked_count = st.session_state.export_reports.get("total_checked", 0)
+    total_hits_count = st.session_state.export_reports.get("total_hits", 0)
+    
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.markdown("""<div class="metric-container"><h4>Total Loaded</h4><h2>0</h2></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-container"><h4>Total Checked</h4><h2>{total_checked_count}</h2></div>""", unsafe_allow_html=True)
     with col2:
-        st.markdown("""<div class="metric-container"><h4>Verified Hits</h4><h2 style='color: #2ea043;'>0</h2></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-container"><h4>Verified Hits</h4><h2 style='color: #2ea043;'>{total_hits_count}</h2></div>""", unsafe_allow_html=True)
     with col3:
         st.markdown("""<div class="metric-container"><h4>Active Proxies</h4><h2 style='color: #58a6ff;'>{}</h2></div>""".format(len(st.session_state.proxy_nodes)), unsafe_allow_html=True)
     with col4:
-        st.markdown("""<div class="metric-container"><h4>Success Rate</h4><h2 style='color: #f0883e;'>0.0%</h2></div>""", unsafe_allow_html=True)
+        success_rate = f"{(total_hits_count / total_checked_count * 100):.1f}%" if total_checked_count > 0 else "0.0%"
+        st.markdown(f"""<div class="metric-container"><h4>Success Rate</h4><h2 style='color: #f0883e;'>{success_rate}</h2></div>""", unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -416,7 +405,7 @@ with tab_engine:
     col_input1, col_input2 = st.columns(2)
     with col_input1:
         st.markdown("**Paste Combo List (`email:password`)**")
-        st.text_area("Paste combo format", height=110, placeholder="user@outlook.com:SecurePassword123", label_visibility="collapsed")
+        st.text_area("Paste combo format", height=110, placeholder="user@outlook.com:SecurePassword123", key="combo_input_box", label_visibility="collapsed")
     with col_input2:
         st.markdown("**Upload Combo Text File**")
         st.file_uploader("Upload .txt combo file", type=["txt"], label_visibility="collapsed")
@@ -443,25 +432,48 @@ with tab_engine:
         clear_logs = st.button("🧹 Clear Logs", use_container_width=True)
 
     if start_engine:
-        st.info("UI Shell Test: Launch button clicked successfully!")
+        combos_raw = st.session_state.get("combo_input_box", "")
+        combo_list = [line.strip() for line in combos_raw.splitlines() if line.strip()]
+        
+        if not combo_list:
+            st.warning("⚠️ Please paste at least one combo (`email:password`) before launching the engine.")
+        else:
+            with st.spinner("🚀 Running asynchronous validation engine against Microsoft endpoints..."):
+                proxy_list = [row["IP Number"] for _, row in st.session_state.proxy_table_data.iterrows()] if st.session_state.get("use_proxies", True) else None
+                timeout = st.session_state.get("proxy_timeout", 10)
+                max_workers = st.session_state.get("workers", 10)
+                
+                results = asyncio.run(engine_core.batch_check_accounts(
+                    combo_list, 
+                    proxy_list=proxy_list, 
+                    timeout=timeout, 
+                    max_concurrent=max_workers
+                ))
+                
+                reports = engine_core.compile_export_reports(results)
+                st.session_state.export_reports = reports
+                st.success(f"✅ Engine Execution Complete! Checked: {reports['total_checked']} | Hits: {reports['total_hits']} | Checkpoints: {reports['total_checkpoints']}")
+
     if pause_engine:
-        st.warning("UI Shell Test: Engine paused.")
+        st.warning("Engine paused by operator.")
     if stop_engine:
-        st.error("UI Shell Test: Force unlocked.")
+        st.error("Engine force unlocked.")
     if clear_logs:
-        st.success("UI Shell Test: Logs cleared.")
+        st.session_state.export_reports = {"hits_text": "", "checkpoints_text": "", "total_checked": 0, "total_hits": 0, "total_checkpoints": 0}
+        st.success("Logs cleared.")
 
     st.markdown("### 📈 Engine Execution Progress")
-    engine_progress = st.progress(0, text="Engine idle. Ready to launch checks.")
+    st.progress(0, text="Engine idle. Ready to launch checks.")
 
     st.markdown("### 📥 Flexible Export Format Options")
+    reports_data = st.session_state.export_reports
     col_exp1, col_exp2, col_exp3 = st.columns(3)
     with col_exp1:
-        st.download_button("💾 Working Hits (TXT)", data="user@outlook.com:Pass123\n", file_name="microsoft_hits.txt", use_container_width=True)
+        st.download_button("💾 Working Hits (TXT)", data=reports_data["hits_text"], file_name="microsoft_hits.txt", use_container_width=True)
     with col_exp2:
-        st.download_button("💾 Checkpoints / Captcha", data="user@outlook.com:Pass123\n", file_name="microsoft_checkpoints.txt", use_container_width=True)
+        st.download_button("💾 Checkpoints / Captcha", data=reports_data["checkpoints_text"], file_name="microsoft_checkpoints.txt", use_container_width=True)
     with col_exp3:
-        st.download_button("💾 Full Session JSON", data="{\"sessions\": []}\n", file_name="session_report.json", use_container_width=True)
+        st.download_button("💾 Full Session JSON", data=json.dumps(reports_data, indent=2), file_name="session_report.json", use_container_width=True)
 
     st.markdown("### **📊 Live Execution Log Viewer**")
     st.markdown("**Action Log Output:**")
@@ -474,7 +486,16 @@ with tab_proxies:
     col_px1, col_px2, col_px3 = st.columns(3)
     with col_px1:
         if st.button("⚡ Run Parallel Health Test", type="primary", use_container_width=True):
-            st.success("Parallel proxy health check completed!")
+            with st.spinner("Testing proxy nodes against live Microsoft endpoints..."):
+                proxy_list = [row["IP Number"] for _, row in st.session_state.proxy_table_data.iterrows()]
+                proxy_results = asyncio.run(engine_core.batch_test_proxies(proxy_list))
+                
+                for res in proxy_results:
+                    matched_row = st.session_state.proxy_table_data['IP Number'] == res['proxy']
+                    if matched_row.any():
+                        st.session_state.proxy_table_data.loc[matched_row, 'Status'] = res.get('status', 'Active')
+                
+                st.success("⚡ Parallel proxy health test completed and metrics updated!")
     with col_px2:
         if st.button("🧹 Clear Dead Proxies", use_container_width=True):
             st.warning("Dead proxies flushed.")
