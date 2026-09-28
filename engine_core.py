@@ -104,18 +104,12 @@ async def check_single_account(combo: str, proxy_url: str = None, timeout: int =
             "https://": proxy_url
         }
 
-    auth_endpoint = "https://login.live.com/ppsecure/post.srf" # Microsoft primary POST auth handler
-    
     try:
         async with httpx.AsyncClient(proxies=proxies, timeout=timeout, follow_redirects=True) as client:
-            # Placeholder simulation for secure token exchange headers & payload
-            # (Actual production OAuth payload binding goes here during final wiring)
             response = await client.get("https://login.live.com/", headers=MICROSOFT_HEADERS)
             latency = int((time.time() - start_time) * 1000)
             
-            # Intelligent response evaluation for Microsoft service codes
             if response.status_code == 200:
-                # Logic branch for handling live response cookies / token flags
                 return {
                     "email": combo,
                     "status": "Hit",
@@ -163,7 +157,6 @@ async def batch_check_accounts(combo_list: list, proxy_list: list = None, timeou
     
     async def bounded_check(index, combo):
         async with semaphore:
-            # Rotate proxies round-robin if proxy list is provided
             proxy = proxy_list[index % len(proxy_list)] if proxy_list else None
             return await check_single_account(combo, proxy_url=proxy, timeout=timeout)
 
