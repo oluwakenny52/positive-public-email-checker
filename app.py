@@ -1,6 +1,6 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v2.6 (BobitoMail Complete Suite - Added Sidebar Reset Success Notification)
+# VERSION: v2.7 (BobitoMail Complete Suite - Persistent Reset Success Notification)
 # DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface with Full Telemetry, Vault, Reading View, and Interactive Mailbox Actions
 # ==========================================================
 
@@ -177,7 +177,7 @@ if "decoder_sensitivity" not in st.session_state:
 st.sidebar.title("🎛️ Microsoft Sentinel Panel")
 st.sidebar.markdown("Focused Exclusively on Microsoft Accounts (`login.live.com`).")
 
-# 1. View Active Configuration State Tree View (Matching exact user requirement image)
+# 1. View Active Configuration State Tree View
 with st.sidebar.expander("🔍 View Active Configuration State", expanded=False):
     active_config_dict = {
         "MAX_WORKERS_START": st.session_state.get("workers", 10),
@@ -301,12 +301,19 @@ with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
     st.markdown("**Telegram Chat ID:**")
     st.text_input("Telegram Chat ID", key="tg_chat_id", placeholder="-100xxxxxxxxxx", label_visibility="collapsed")
 
-# --- INSTANT RESET DEFAULTS HANDLER WITH SUCCESS NOTIFICATION ---
+# --- PERSISTENT RESET SUCCESS NOTIFICATION HANDLER ---
+if "reset_success_toast" not in st.session_state:
+    st.session_state.reset_success_toast = False
+
+if st.session_state.reset_success_toast:
+    st.sidebar.success("All settings reset successfully!")
+    st.session_state.reset_success_toast = False
+
 col_sb1, col_sb2 = st.sidebar.columns(2)
 with col_sb1:
     if st.button("🔄 Reset Defaults", use_container_width=True):
         st.session_state.reset_requested = True
-        st.sidebar.success("All settings reset successfully!")
+        st.session_state.reset_success_toast = True
         st.rerun()
 with col_sb2:
     if st.button("💾 Apply Settings", type="primary", use_container_width=True):
