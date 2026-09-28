@@ -1,6 +1,6 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v1.7
+# VERSION: v1.8 (Optimized BobitoMail Feed Layout)
 # DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface & Bot Rewrite Decoder Suite
 # ==========================================================
 
@@ -313,7 +313,7 @@ with tab_engine:
         st.download_button("💾 Full Session JSON", data="{\"sessions\": []}\n", file_name="session_report.json", use_container_width=True)
 
     st.markdown("### **📊 Live Execution Log Viewer**")
-    st.code("[15:14:34] 🚀 UI Shell v1.7 initialized successfully. All modules active.", language="text")
+    st.code("[15:14:34] 🚀 UI Shell v1.8 initialized successfully. All modules active.", language="text")
 
 with tab_proxies:
     st.subheader("🌐 Live Proxy Pool & Infrastructure Manager")
@@ -330,16 +330,16 @@ with tab_proxies:
         st.download_button("📥 Export Active Proxies", data="192.168.1.10:8080\n", file_name="active_proxies.txt", use_container_width=True)
 
 with tab_terminal:
-    # --- BOBITOMAIL ULTIMATE LAYOUT ---
+    # --- BOBITOMAIL PRO OPTIMIZED LAYOUT (TABBED / EXPANDER ARCHITECTURE) ---
     st.subheader("✉️ BobitoMail Pro — Multi-Account Inbox & Bot Decoder Suite")
     
-    # Top Search & Action Bar
+    # Search & Quick Actions Bar
     srch_col, act_col1, act_col2, act_col3 = st.columns([4, 1, 1, 1])
     with srch_col:
         mail_search = st.text_input("Search across messages...", placeholder="🔍 Search sender, subject or keyword...", label_visibility="collapsed")
     with act_col1:
         if st.button("🔄 Sync", use_container_width=True):
-            st.toast("Syncing IMAP folders...")
+            st.toast("Syncing Microsoft Graph token sessions...")
     with act_col2:
         if st.button("📥 Export", use_container_width=True):
             st.toast("Exporting mail bundle...")
@@ -349,74 +349,73 @@ with tab_terminal:
 
     st.markdown("---")
 
-    # Layout Split: Sidebar Accounts Tree & Message Feed
-    tree_col, feed_col = st.columns([1, 2.5])
-
-    with tree_col:
-        st.markdown("### 📂 ACCOUNTS")
-        selected_account = st.radio(
-            "Account Switcher",
-            options=st.session_state.live_sessions,
-            label_visibility="collapsed"
-        )
+    # Collapsible Expander containing Tabbed Account & Folder Switches (Keeps Feed Front & Center)
+    with st.expander("📂 Switch Account & Folders (Click to Expand/Hide Tree)", expanded=True):
+        sub_tab_acc, sub_tab_fld = st.tabs(["👤 Connected Accounts", "📁 Folder Tree"])
+        
+        with sub_tab_acc:
+            selected_account = st.radio(
+                "Account Switcher",
+                options=st.session_state.live_sessions,
+                label_visibility="collapsed"
+            )
+        
+        with sub_tab_fld:
+            folder_choice = st.radio(
+                "Folder Tree",
+                options=["📥 INBOX (60)", "📤 Sent Items", "📝 Drafts", "⚠️ Junk Email (191)", "📦 Archive (61)", "🗑️ Deleted Items"],
+                label_visibility="collapsed"
+            )
         
         st.markdown("---")
-        st.markdown("**Folders:**")
-        folder_choice = st.radio(
-            "Folder Tree",
-            options=["📥 INBOX (60)", "📤 Sent", "📝 Draft", "⚠️ Trash (191)", "📦 Bulk (316)", "📁 Archive (61)"],
-            label_visibility="collapsed"
-        )
-        
-        st.markdown("---")
-        if st.button("🔄 Restore Session State", use_container_width=True):
-            st.success(f"Restored session for {selected_account}!")
+        if st.button("🔄 Restore Session State (Refresh OAuth Access Token)", use_container_width=True):
+            st.success(f"Successfully refreshed Microsoft Graph token session for {selected_account}!")
 
-    with feed_col:
-        st.markdown(f"### 🗂️ FEED — `{selected_account}` ({folder_choice})")
-        
-        # Interactive Message Item 1 (Simulating Bot Rewrite / Cloud Wrapper)
+    st.markdown("---")
+    st.markdown(f"### 🗂️ FEED — `{selected_account}` ({folder_choice})")
+    
+    # Interactive Message Item 1 (Simulating Bot Rewrite / Cloud Wrapper)
+    st.markdown("""
+    <div class="mail-item">
+        <b>☁️ [hotmailerr_bot] Security Alert: Please Open (hotmailerr_bot)</b><br>
+        <span style='color: #8b949e; font-size: 13px;'>Temu &lt;email@news.temuemail.com&gt; | 27 Sep 2026, 21:16 UTC</span><br>
+        <p style='margin: 5px 0 0 0; font-size: 13px; color: #f85149;'>🔒 <b>This mail was moved to your Cloud Lounge. Original content is locked behind Premium Cloud...</b></p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.expander("🛠️ Bot Rewrite & Fake Content Decoder (Inspect Source)", expanded=True):
+        st.markdown("Our decoder engine detected a bot wrapper rewrite or fake content mask. Decoded source parameters below:")
         st.markdown("""
-        <div class="mail-item">
-            <b>☁️ [hotmailerr_bot] Security Alert: Please Open (hotmailerr_bot)</b><br>
-            <span style='color: #8b949e; font-size: 13px;'>Temu &lt;email@news.temuemail.com&gt; | 27 Sep 2026, 21:16 UTC</span><br>
-            <p style='margin: 5px 0 0 0; font-size: 13px; color: #f85149;'>🔒 <b>This mail was moved to your Cloud Lounge. Original content is locked behind Premium Cloud...</b></p>
+        <div class="decoder-box">
+        <b>[DECODER TELEMETRY REPORT]</b><br>
+        - Wrapper Type: Cloud Lounge / Bot Mask v3.2<br>
+        - True Sender IP: 185.199.108.153 (Verified Microsoft Relay)<br>
+        - Original Subject: <i>Your Amazon Web Services Password Has Been Updated</i><br>
+        - Raw MIME Header Hash: <code>[MENC2:NlIzRsF5bdfZeWe2uuqr1ZyTUTReaUWUXuS]</code><br>
+        - Status: 🟢 Successfully bypassed bot rewrite wrapper and extracted raw text payload.
         </div>
         """, unsafe_allow_html=True)
+        
+        if st.button("📥 Download Raw Email Source Code (.eml)", use_container_width=True):
+            st.success("Raw source code file compiled and downloaded.")
 
-        with st.expander("🛠️ Bot Rewrite & Fake Content Decoder (Inspect Source)", expanded=True):
-            st.markdown("Our decoder engine detected a bot wrapper rewrite or fake content mask. Decoded source parameters below:")
-            st.markdown("""
-            <div class="decoder-box">
-            <b>[DECODER TELEMETRY REPORT]</b><br>
-            - Wrapper Type: Cloud Lounge / Bot Mask v3.2<br>
-            - True Sender IP: 185.199.108.153 (Verified Microsoft Relay)<br>
-            - Original Subject: <i>Your Amazon Web Services Password Has Been Updated</i><br>
-            - Raw MIME Header Hash: <code>[MENC2:NlIzRsF5bdfZeWe2uuqr1ZyTUTReaUWUXuS]</code><br>
-            - Status: 🟢 Successfully bypassed bot rewrite wrapper and extracted raw text payload.
-            </div>
-            """, unsafe_allow_html=True)
-            
-            if st.button("📥 Download Raw Email Source Code (.eml)", use_container_width=True):
-                st.success("Raw source code file compiled and downloaded.")
+    # Interactive Message Item 2
+    st.markdown("""
+    <div class="mail-item">
+        <b>🔑 Your Amazon Web Services Password Has Been Updated</b><br>
+        <span style='color: #8b949e; font-size: 13px;'>gottarace30 • Microsoft Graph Token | 27 Sep 2026, 7:44 PM</span><br>
+        <p style='margin: 5px 0 0 0; font-size: 13px;'>Greetings from Amazon Web Services, As you requested, your AWS account password has been updated...</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-        # Interactive Message Item 2
-        st.markdown("""
-        <div class="mail-item">
-            <b>🔑 Your Amazon Web Services Password Has Been Updated</b><br>
-            <span style='color: #8b949e; font-size: 13px;'>gottarace30 • IMAP | 27 Sep 2026, 7:44 PM</span><br>
-            <p style='margin: 5px 0 0 0; font-size: 13px;'>Greetings from Amazon Web Services, As you requested, your AWS account password has been updated...</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown("---")
-        exp_t1, exp_t2, exp_t3 = st.columns(3)
-        with exp_t1:
-            st.download_button("💾 Mark & Download Valids", data=selected_account, file_name="marked_valids.txt", use_container_width=True)
-        with exp_t2:
-            st.download_button("💾 Mark & Download Invalids", data="invalid_sample@outlook.com", file_name="marked_invalids.txt", use_container_width=True)
-        with exp_t3:
-            st.download_button("💾 Export Folder Notes", data="Notes: Clean sync.", file_name="folder_notes.txt", use_container_width=True)
+    st.markdown("---")
+    exp_t1, exp_t2, exp_t3 = st.columns(3)
+    with exp_t1:
+        st.download_button("💾 Mark & Download Valids", data=selected_account, file_name="marked_valids.txt", use_container_width=True)
+    with exp_t2:
+        st.download_button("💾 Mark & Download Invalids", data="invalid_sample@outlook.com", file_name="marked_invalids.txt", use_container_width=True)
+    with exp_t3:
+        st.download_button("💾 Export Folder Notes", data="Notes: Clean token sync.", file_name="folder_notes.txt", use_container_width=True)
 
 with tab_vault:
     st.subheader("🔑 Microsoft Saved Passwords Vault Scrape")
@@ -455,14 +454,14 @@ with tab_debug:
     </div>
     """, unsafe_allow_html=True)
     st.markdown("### 📜 Verbose Protocol Path Logs")
-    st.code("[15:14:34] [VERBOSE] Initializing BobitoMail IMAP multi-account socket streams...", language="text")
+    st.code("[15:14:34] [VERBOSE] Initializing BobitoMail Microsoft Graph multi-account session streams...", language="text")
 
 with tab_auditor:
     st.subheader("🧪 Functionality & State Auditor")
     st.markdown("""
     | Control Name | Type | Target Function | Last Trigger Status |
     | :--- | :--- | :--- | :--- |
-    | **BobitoMail Tree** | UI Component | Multi-account sidebar folder tree | 🟢 Active |
+    | **BobitoMail Tabbed Tree** | UI Component | Collapsible account & folder switchers | 🟢 Active |
     | **Bot Decoder** | Engine Parser| Strips bot wrappers & extracts source | 🟢 Online (`Ready`) |
     | **Vault Scraper** | Tab Module | Local browser credential extraction | 🟢 Standby (`Ready`) |
     """)
