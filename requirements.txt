@@ -2,6 +2,6 @@ streamlit
 folium
 streamlit-folium
 requests
+httpx
 pandas
 playwright
-
