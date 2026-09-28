@@ -1,6 +1,6 @@
 # ==========================================================
 # FILE: engine_core.py
-# VERSION: v1.1 (Phase 2 - Asynchronous Account Authentication & Batch Routing)
+# VERSION: v1.2 (Phase 2 - Asynchronous Account Authentication & Batch Routing)
 # DESCRIPTION: Core HTTP validation and routing engine for Microsoft accounts.
 # ==========================================================
 
@@ -163,3 +163,28 @@ async def batch_check_accounts(combo_list: list, proxy_list: list = None, timeou
     tasks = [bounded_check(i, combo) for i, combo in enumerate(combo_list)]
     results = await asyncio.gather(*tasks)
     return results
+
+def compile_export_reports(results: list) -> dict:
+    """
+    Parses batch check results and compiles separate text buffers 
+    for Hits, Checkpoints, and Full JSON reports.
+    """
+    hits_list = []
+    checkpoints_list = []
+    
+    for res in results:
+        status = res.get("status")
+        combo = res.get("email")
+        if status == "Hit":
+            hits_list.append(combo)
+        elif status == "Captcha":
+            checkpoints_list.append(f"{combo} | Details: {res.get('details')}")
+            
+    return {
+        "hits_text": "\n".join(hits_list) + ("\n" if hits_list else ""),
+        "checkpoints_text": "\n".join(checkpoints_list) + ("\n" if checkpoints_list else ""),
+        "total_checked": len(results),
+        "total_hits": len(hits_list),
+        "total_checkpoints": len(checkpoints_list)
+    }
+
