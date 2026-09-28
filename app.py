@@ -1,10 +1,11 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v2.1 (BobitoMail Complete Suite & Interactive Reader)
-# DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface with Full Telemetry, Vault, and Reading View
+# VERSION: v2.2 (BobitoMail Complete Suite with Functional Export & Settings Drawer)
+# DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface with Full Telemetry, Vault, Reading View, and Interactive Mailbox Actions
 # ==========================================================
 
 import streamlit as st
+import json
 import folium
 from streamlit_folium import st_folium
 import pandas as pd
@@ -100,12 +101,28 @@ if "live_sessions" not in st.session_state:
         "derose7@outlook.com"
     ]
 
-# Reader and Pagination State Management
+# Reader, Pagination, and Action State Management
 if "selected_mail_id" not in st.session_state:
     st.session_state.selected_mail_id = None
 
 if "current_page" not in st.session_state:
     st.session_state.current_page = 1
+
+if "show_export_panel" not in st.session_state:
+    st.session_state.show_export_panel = False
+
+if "show_settings_panel" not in st.session_state:
+    st.session_state.show_settings_panel = False
+
+# Mail Client Preferences State
+if "display_density" not in st.session_state:
+    st.session_state.display_density = "Compact Row View"
+
+if "auto_sync_interval" not in st.session_state:
+    st.session_state.auto_sync_interval = "30s"
+
+if "decoder_sensitivity" not in st.session_state:
+    st.session_state.decoder_sensitivity = True
 
 # ==========================================
 # SIDEBAR CONTROL PANEL (COMPLETE SUITE)
@@ -346,7 +363,7 @@ with tab_proxies:
         st.download_button("📥 Export Active Proxies", data="192.168.1.10:8080\n", file_name="active_proxies.txt", use_container_width=True)
 
 with tab_terminal:
-    # --- BOBITOMAIL PRO INTERACTIVE READER & PAGINATION SUITE ---
+    # --- BOBITOMAIL PRO INTERACTIVE READER & BOT DECODER SUITE ---
     st.subheader("✉️ BobitoMail Pro — Multi-Account Inbox & Bot Decoder Suite")
     
     # Top Search & Action Bar
@@ -358,12 +375,56 @@ with tab_terminal:
             st.toast("Syncing Microsoft Graph token sessions...")
     with act_col2:
         if st.button("📥 Export", use_container_width=True):
-            st.toast("Exporting mail bundle...")
+            st.session_state.show_export_panel = not st.session_state.show_export_panel
+            st.session_state.show_settings_panel = False
     with act_col3:
         if st.button("⚙️ Settings", use_container_width=True):
-            st.toast("Mail client preferences opened.")
+            st.session_state.show_settings_panel = not st.session_state.show_settings_panel
+            st.session_state.show_export_panel = False
 
-    st.markdown("---")
+    # --- FUNCTIONAL EXPORT DRAWER ---
+    if st.session_state.show_export_panel:
+        st.markdown("""
+        <div style="background-color: #161b22; border: 1px solid #58a6ff; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+        <h4>📥 Mailbox Export Configuration</h4>
+        <p style="font-size: 13px; color: #8b949e;">Select your target bundle format and export scope below:</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        ex_col1, ex_col2 = st.columns(2)
+        with ex_col1:
+            export_format = st.selectbox("Export Format", options=["JSON (Full Metadata)", "CSV (Spreadsheet)", "TXT (Raw Body Archive)"], index=0)
+        with ex_col2:
+            export_scope = st.selectbox("Export Scope", options=["Current Page Only", "All Folders & Messages", "Unread Messages Only"], index=0)
+        
+        sample_export_data = json.dumps({"account": "ishad.satyen@outlook.com", "exported_at": str(datetime.now()), "scope": export_scope}, indent=2)
+        st.download_button(
+            "💾 Download Compiled Export Bundle",
+            data=sample_export_data,
+            file_name=f"bobitomail_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            type="primary",
+            use_container_width=True
+        )
+        st.markdown("---")
+
+    # --- FUNCTIONAL SETTINGS DRAWER ---
+    if st.session_state.show_settings_panel:
+        st.markdown("""
+        <div style="background-color: #161b22; border: 1px solid #f0883e; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+        <h4>⚙️ Mail Client Preferences</h4>
+        <p style="font-size: 13px; color: #8b949e;">Customize display modes and decoder sensitivity for active sessions:</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        set_col1, set_col2 = st.columns(2)
+        with set_col1:
+            st.session_state.display_density = st.selectbox("Display Density", options=["Compact Row View", "Expanded Preview View"], index=0 if st.session_state.display_density=="Compact Row View" else 1)
+            st.session_state.auto_sync_interval = st.selectbox("Background Sync Interval", options=["Manual Only", "15s", "30s", "1m", "5m"], index=2)
+        with set_col2:
+            st.session_state.decoder_sensitivity = st.checkbox("Enable Automatic Bot Wrapper Stripping", value=st.session_state.decoder_sensitivity)
+            if st.button("💾 Save Preferences", use_container_width=True):
+                st.success("Mail client preferences updated successfully!")
+        st.markdown("---")
 
     # Collapsible Expander for Account Switcher & Folders
     with st.expander("📂 Switch Account & Folders (Click to Expand/Hide Tree)", expanded=False):
