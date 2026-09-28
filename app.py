@@ -1,7 +1,7 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v2.8 (BobitoMail Complete Suite - Live Engine Integration)
-# DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface with Full Telemetry, Vault, Reading View, and Interactive Mailbox Actions
+# VERSION: v2.9 (BobitoMail Complete Suite - Fully Synchronized with engine_core.py)
+# DESCRIPTION: Microsoft Account Sentinel Engine - Frontend synchronized natively with backend engine_core.py
 # ==========================================================
 
 import streamlit as st
@@ -137,10 +137,10 @@ if "proxy_nodes" not in st.session_state:
 
 if "proxy_table_data" not in st.session_state:
     st.session_state.proxy_table_data = pd.DataFrame([
-        {"IP Number": "192.168.1.10:8080", "Country": "United States", "Region": "North America", "Score": 95, "Successful": 420, "Fails": 3},
-        {"IP Number": "172.16.25.4:3128", "Country": "United Kingdom", "Region": "Europe", "Score": 88, "Successful": 310, "Fails": 12},
-        {"IP Number": "10.0.0.55:1080", "Country": "Germany", "Region": "Europe", "Score": 72, "Successful": 195, "Fails": 25},
-        {"IP Number": "192.168.2.14:80", "Country": "Japan", "Region": "Asia", "Score": 45, "Successful": 80, "Fails": 45},
+        {"IP Number": "192.168.1.10:8080", "Country": "United States", "Region": "North America", "Score": 95, "Successful": 420, "Fails": 3, "Status": "Active", "Latency": "42ms"},
+        {"IP Number": "172.16.25.4:3128", "Country": "United Kingdom", "Region": "Europe", "Score": 88, "Successful": 310, "Fails": 12, "Status": "Active", "Latency": "85ms"},
+        {"IP Number": "10.0.0.55:1080", "Country": "Germany", "Region": "Europe", "Score": 72, "Successful": 195, "Fails": 25, "Status": "Active", "Latency": "64ms"},
+        {"IP Number": "192.168.2.14:80", "Country": "Japan", "Region": "Asia", "Score": 45, "Successful": 80, "Fails": 45, "Status": "Active", "Latency": "120ms"},
     ])
 
 if "live_sessions" not in st.session_state:
@@ -438,11 +438,12 @@ with tab_engine:
         if not combo_list:
             st.warning("⚠️ Please paste at least one combo (`email:password`) before launching the engine.")
         else:
-            with st.spinner("🚀 Running asynchronous validation engine against Microsoft endpoints..."):
+            with st.spinner("🚀 Running asynchronous validation engine against Microsoft endpoints via engine_core..."):
                 proxy_list = [row["IP Number"] for _, row in st.session_state.proxy_table_data.iterrows()] if st.session_state.get("use_proxies", True) else None
                 timeout = st.session_state.get("proxy_timeout", 10)
                 max_workers = st.session_state.get("workers", 10)
                 
+                # Calls backend function batch_check_accounts from engine_core.py
                 results = asyncio.run(engine_core.batch_check_accounts(
                     combo_list, 
                     proxy_list=proxy_list, 
@@ -450,6 +451,7 @@ with tab_engine:
                     max_concurrent=max_workers
                 ))
                 
+                # Calls backend report compiler from engine_core.py
                 reports = engine_core.compile_export_reports(results)
                 st.session_state.export_reports = reports
                 st.success(f"✅ Engine Execution Complete! Checked: {reports['total_checked']} | Hits: {reports['total_hits']} | Checkpoints: {reports['total_checkpoints']}")
@@ -486,21 +488,30 @@ with tab_proxies:
     col_px1, col_px2, col_px3 = st.columns(3)
     with col_px1:
         if st.button("⚡ Run Parallel Health Test", type="primary", use_container_width=True):
-            with st.spinner("Testing proxy nodes against live Microsoft endpoints..."):
+            with st.spinner("Testing proxy nodes against live Microsoft endpoints via engine_core..."):
                 proxy_list = [row["IP Number"] for _, row in st.session_state.proxy_table_data.iterrows()]
-                proxy_results = asyncio.run(engine_core.batch_test_proxies(proxy_list))
+                timeout = st.session_state.get("proxy_timeout", 10)
                 
+                # Calls backend function batch_test_proxies from engine_core.py
+                proxy_results = asyncio.run(engine_core.batch_test_proxies(proxy_list, timeout=timeout))
+                
+                # Updates 'Status' and 'Latency' for matching IP addresses while keeping existing columns intact
                 for res in proxy_results:
-                    matched_row = st.session_state.proxy_table_data['IP Number'] == res['proxy']
-                    if matched_row.any():
-                        st.session_state.proxy_table_data.loc[matched_row, 'Status'] = res.get('status', 'Active')
+                    proxy_ip = res.get('proxy')
+                    matched_rows = st.session_state.proxy_table_data['IP Number'] == proxy_ip
+                    if matched_rows.any():
+                        st.session_state.proxy_table_data.loc[matched_rows, 'Status'] = res.get('status', 'Active')
+                        st.session_state.proxy_table_data.loc[matched_rows, 'Latency'] = res.get('latency', 'N/A')
                 
                 st.success("⚡ Parallel proxy health test completed and metrics updated!")
     with col_px2:
         if st.button("🧹 Clear Dead Proxies", use_container_width=True):
-            st.warning("Dead proxies flushed.")
+            dead_mask = st.session_state.proxy_table_data['Status'] != 'Active'
+            st.session_state.proxy_table_data = st.session_state.proxy_table_data[~dead_mask].reset_index(drop=True)
+            st.success("Dead proxies flushed from table.")
     with col_px3:
-        st.download_button("📥 Export Active Proxies", data="192.168.1.10:8080\n", file_name="active_proxies.txt", use_container_width=True)
+        active_proxies_text = "\n".join(st.session_state.proxy_table_data[st.session_state.proxy_table_data['Status'] == 'Active']['IP Number'].tolist())
+        st.download_button("📥 Export Active Proxies", data=active_proxies_text, file_name="active_proxies.txt", use_container_width=True)
 
 with tab_terminal:
     st.subheader("✉️ BobitoMail Pro — Multi-Account Inbox & Bot Decoder Suite")
