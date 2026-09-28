@@ -1,6 +1,6 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v2.3 (BobitoMail Complete Suite with Functional Export, Settings Drawer & Active Config State)
+# VERSION: v2.4 (BobitoMail Complete Suite with Functional Sidebar Additions & Instant Reset Engine)
 # DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface with Full Telemetry, Vault, Reading View, and Interactive Mailbox Actions
 # ==========================================================
 
@@ -9,7 +9,6 @@ import json
 import folium
 from streamlit_folium import st_folium
 import pandas as pd
-import random
 from datetime import datetime
 
 # --- PAGE CONFIGURATION ---
@@ -75,27 +74,51 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- INSTANT RESET STATE HANDLER ---
-if "reset_trigger" not in st.session_state:
-    st.session_state.reset_trigger = False
+# --- FACTORY DEFAULTS DICTIONARY & SESSION STATE INITIALIZATION ---
+DEFAULT_CONFIG = {
+    "workers": 5,
+    "deadline": 45,
+    "max_acc": 5000,
+    "delay_between_acc": 2,
+    "use_proxies": True,
+    "preflight_test": True,
+    "proxy_protocol": "HTTP/HTTPS",
+    "rotation_strategy": "Sticky Session (Per Account)",
+    "proxy_timeout": 10,
+    "min_proxy_score": 40,
+    "pool_mode": "us_only",
+    "country_code": "US",
+    "mix_list": "US,GB,DE",
+    "stealth_mode": True,
+    "fire_up_fail": True,
+    "force_en_us": True,
+    "block_webauthn": True,
+    "warm_up": True,
+    "keep_alive_js": True,
+    "device_pool": True,
+    "debug_verbose": True,
+    "auto_kmsi": True,
+    "speed_preset": "normal",
+    "typing_speed": 50,
+    "mouse_delay": 100,
+    "rest_fail": 3,
+    "rest_success": 5,
+    "filter_disposable": True,
+    "retry_cloudflare": True,
+    "captcha_alert_stop": True,
+    "sound_on_success": True,
+    "soft_rate_limit": True,
+    "extract_recovery": True,
+    "webhook_url": "",
+    "tg_token": "",
+    "tg_chat_id": "",
+    "active_config_state": "Full Telemetry JSON"
+}
 
-if st.session_state.reset_trigger:
-    st.session_state.workers = 5
-    st.session_state.deadline = 45
-    st.session_state.max_acc = 5000
-    st.session_state.delay_between_acc = 2
-    st.session_state.use_proxies = True
-    st.session_state.preflight_test = True
-    st.session_state.proxy_protocol = "HTTP/HTTPS"
-    st.session_state.rotation_strategy = "Sticky Session (Per Account)"
-    st.session_state.proxy_timeout = 10
-    st.session_state.min_proxy_score = 40
-    st.session_state.display_density = "Compact Row View"
-    st.session_state.auto_sync_interval = "30s"
-    st.session_state.decoder_sensitivity = True
-    st.session_state.reset_trigger = False
+for key, val in DEFAULT_CONFIG.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
-# --- SESSION STATE SHELL INITIALIZATION ---
 if "proxy_nodes" not in st.session_state:
     st.session_state.proxy_nodes = [
         {"lat": 37.7749, "lon": -122.4194, "city": "San Francisco, US", "status": "Active", "latency": "42ms"},
@@ -106,10 +129,10 @@ if "proxy_nodes" not in st.session_state:
 
 if "proxy_table_data" not in st.session_state:
     st.session_state.proxy_table_data = pd.DataFrame([
-        {"IP:Port": "192.168.1.10:8080", "Protocol": "HTTP", "Country": "US", "Latency": "42ms", "Health Score": 95, "Status": "Active"},
-        {"IP:Port": "172.16.25.4:3128", "Protocol": "HTTPS", "Country": "GB", "Latency": "85ms", "Health Score": 88, "Status": "Active"},
-        {"IP:Port": "10.0.0.55:1080", "Protocol": "SOCKS5", "Country": "DE", "Latency": "64ms", "Health Score": 72, "Status": "Active"},
-        {"IP:Port": "192.168.2.14:80", "Protocol": "HTTP", "Country": "JP", "Latency": "120ms", "Health Score": 45, "Status": "Degraded"},
+        {"IP Number": "192.168.1.10:8080", "Country": "United States", "Region": "North America", "Score": 95, "Successful": 420, "Fails": 3},
+        {"IP Number": "172.16.25.4:3128", "Country": "United Kingdom", "Region": "Europe", "Score": 88, "Successful": 310, "Fails": 12},
+        {"IP Number": "10.0.0.55:1080", "Country": "Germany", "Region": "Europe", "Score": 72, "Successful": 195, "Fails": 25},
+        {"IP Number": "192.168.2.14:80", "Country": "Japan", "Region": "Asia", "Score": 45, "Successful": 80, "Fails": 45},
     ])
 
 if "live_sessions" not in st.session_state:
@@ -142,103 +165,120 @@ if "auto_sync_interval" not in st.session_state:
 if "decoder_sensitivity" not in st.session_state:
     st.session_state.decoder_sensitivity = True
 
-if "active_config_state" not in st.session_state:
-    st.session_state.active_config_state = "Full Telemetry JSON"
-
 # ==========================================
-# SIDEBAR CONTROL PANEL (COMPLETE SUITE)
+# SIDEBAR CONTROL PANEL (SLIDE-OUT SUITE)
 # ==========================================
 st.sidebar.title("🎛️ Microsoft Sentinel Panel")
 st.sidebar.markdown("Focused Exclusively on Microsoft Accounts (`login.live.com`).")
 
-with st.sidebar.expander("⚙️ Execution & Thread Settings", expanded=True):
+# 1. Drop-down for View Active Configuration State in the slide-out panel
+st.sidebar.selectbox(
+    "View Active Configuration State",
+    options=["Full Telemetry JSON", "Active Proxy Pool Summary", "Thread & Worker Stats", "Stealth Flags Overview"],
+    key="active_config_state"
+)
+
+# 2. Proxy Management & Health block
+st.sidebar.markdown("""
+<div style="background-color: #161b22; border: 1px solid #30363d; padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 13px; color: #58a6ff; font-weight: 600;">
+🌐 Proxy Management & Health<br>
+Loaded Proxies: 66 &nbsp;|&nbsp; Filtered Pool: 6
+</div>
+""", unsafe_allow_html=True)
+
+# 3. Drop down for Proxy Health & Geo Dashboard
+with st.sidebar.expander("📊 Proxy Health & Geo Dashboard"):
+    st.dataframe(st.session_state.proxy_table_data, use_container_width=True)
+
+with st.sidebar.expander("⚙️ Execution & Thread Settings", expanded=False):
     st.markdown("**Workers Start:**")
-    workers = st.slider("Workers Slider", min_value=1, max_value=50, value=5, step=1, label_visibility="collapsed")
+    st.slider("Workers Slider", min_value=1, max_value=50, key="workers", step=1, label_visibility="collapsed")
 
     st.markdown("**Deadline (s):**")
-    deadline = st.slider("Deadline Slider", min_value=5, max_value=120, value=45, step=5, label_visibility="collapsed")
+    st.slider("Deadline Slider", min_value=5, max_value=120, key="deadline", step=5, label_visibility="collapsed")
 
     st.markdown("**Max Accounts:**")
-    max_acc = st.slider("Max Accounts Slider", min_value=0, max_value=5000, value=5000, step=100, label_visibility="collapsed")
+    st.slider("Max Accounts Slider", min_value=0, max_value=5000, key="max_acc", step=100, label_visibility="collapsed")
 
     st.markdown("**Delay Between Accounts (s):**")
-    delay_between_acc = st.slider("Delay Between Accounts", min_value=0, max_value=15, value=2, step=1, label_visibility="collapsed")
+    st.slider("Delay Between Accounts", min_value=0, max_value=15, key="delay_between_acc", step=1, label_visibility="collapsed")
 
 with st.sidebar.expander("🌐 Proxy Infrastructure & Routing", expanded=False):
-    use_proxies = st.checkbox("Enable Proxy Routing", value=True)
-    preflight_test = st.checkbox("Preflight Test Proxy against Live", value=True)
+    st.checkbox("Enable Proxy Routing", key="use_proxies")
+    st.checkbox("Preflight Test Proxy against Live", key="preflight_test")
 
     st.markdown("**Proxy Protocol:**")
-    proxy_protocol = st.selectbox("Proxy Protocol Select", options=["HTTP/HTTPS", "SOCKS5", "SOCKS4", "Mixed"], index=0, label_visibility="collapsed")
+    st.selectbox("Proxy Protocol Select", options=["HTTP/HTTPS", "SOCKS5", "SOCKS4", "Mixed"], key="proxy_protocol", label_visibility="collapsed")
 
     st.markdown("**Rotation Strategy:**")
-    rotation_strategy = st.selectbox("Rotation Strategy Select", options=["Sticky Session (Per Account)", "Round-Robin (Per Request)", "Static Pool"], index=0, label_visibility="collapsed")
+    st.selectbox("Rotation Strategy Select", options=["Sticky Session (Per Account)", "Round-Robin (Per Request)", "Static Pool"], key="rotation_strategy", label_visibility="collapsed")
 
     st.markdown("**Proxy Timeout (s):**")
-    proxy_timeout = st.slider("Proxy Timeout Slider", min_value=2, max_value=30, value=10, step=1, label_visibility="collapsed")
+    st.slider("Proxy Timeout Slider", min_value=2, max_value=30, key="proxy_timeout", step=1, label_visibility="collapsed")
 
     st.markdown("**Min Proxy Score:**")
-    min_proxy_score = st.slider("Min proxy score Slider", min_value=0, max_value=100, value=40, step=5, label_visibility="collapsed")
+    st.slider("Min proxy score Slider", min_value=0, max_value=100, key="min_proxy_score", step=5, label_visibility="collapsed")
 
     st.markdown("**Pool Mode:**")
-    pool_mode = st.selectbox("Pool mode select", options=["us_only", "all", "country", "mix"], index=0, label_visibility="collapsed")
+    st.selectbox("Pool mode select", options=["us_only", "all", "country", "mix"], key="pool_mode", label_visibility="collapsed")
 
     st.markdown("**Country Code:**")
-    country_code = st.text_input("Country code input", value="US", label_visibility="collapsed")
+    st.text_input("Country code input", key="country_code", label_visibility="collapsed")
 
     st.markdown("**Mix List:**")
-    mix_list = st.text_input("Mix list input", value="US,GB,DE", label_visibility="collapsed")
+    st.text_input("Mix list input", key="mix_list", label_visibility="collapsed")
 
 with st.sidebar.expander("🛡️ Stealth & Anti-Bot", expanded=False):
-    stealth_mode = st.checkbox("Stealth Mode (Mask WebDriver)", value=True)
-    fire_up_fail = st.checkbox("🔥 Fire-up on Fail (Clear Context / Fresh Tab)", value=True)
-    force_en_us = st.checkbox("Force en-US UI Language", value=True)
-    block_webauthn = st.checkbox("Block WebAuthn / Passkeys", value=True)
-    warm_up = st.checkbox("Warm-up (Random Neutral Site)", value=True)
-    keep_alive_js = st.checkbox("Keep-alive JSClicks (Prevent Idle)", value=True)
-    device_pool = st.checkbox("Device Pool (Rotate UA / Viewport)", value=True)
-    debug_verbose = st.checkbox("Verbose Protocol Path Logs", value=True)
-    auto_kmsi = st.checkbox("Auto-Accept KMSI ('Stay signed in?')", value=True)
+    st.checkbox("Stealth Mode (Mask WebDriver)", key="stealth_mode")
+    st.checkbox("🔥 Fire-up on Fail (Clear Context / Fresh Tab)", key="fire_up_fail")
+    st.checkbox("Force en-US UI Language", key="force_en_us")
+    st.checkbox("Block WebAuthn / Passkeys", key="block_webauthn")
+    st.checkbox("Warm-up (Random Neutral Site)", key="warm_up")
+    st.checkbox("Keep-alive JSClicks (Prevent Idle)", key="keep_alive_js")
+    st.checkbox("Device Pool (Rotate UA / Viewport)", key="device_pool")
+    st.checkbox("Verbose Protocol Path Logs", key="debug_verbose")
+    st.checkbox("Auto-Accept KMSI ('Stay signed in?')", key="auto_kmsi")
 
     st.markdown("**Speed Mode Preset:**")
-    speed_preset = st.selectbox("Speed Preset", options=["slow", "normal", "fast", "superfast"], index=1, label_visibility="collapsed")
+    st.selectbox("Speed Preset", options=["slow", "normal", "fast", "superfast"], key="speed_preset", label_visibility="collapsed")
 
     st.markdown("**Typing Speed (ms/char):**")
-    typing_speed = st.slider("Typing Speed", min_value=10, max_value=200, value=50, step=10, label_visibility="collapsed")
+    st.slider("Typing Speed", min_value=10, max_value=200, key="typing_speed", step=10, label_visibility="collapsed")
 
     st.markdown("**Mouse Move Delay (ms):**")
-    mouse_delay = st.slider("Mouse Delay", min_value=0, max_value=500, value=100, step=25, label_visibility="collapsed")
+    st.slider("Mouse Delay", min_value=0, max_value=500, key="mouse_delay", step=25, label_visibility="collapsed")
 
 with st.sidebar.expander("⏱️ Throttling, Rest & Backoff", expanded=False):
     st.markdown("**Rest After Fail (s):**")
-    rest_fail = st.slider("Rest After Fail", min_value=0, max_value=30, value=3, step=1, label_visibility="collapsed")
+    st.slider("Rest After Fail", min_value=0, max_value=30, key="rest_fail", step=1, label_visibility="collapsed")
 
     st.markdown("**Rest After Success (s):**")
-    rest_success = st.slider("Rest After Success", min_value=0, max_value=30, value=5, step=1, label_visibility="collapsed")
+    st.slider("Rest After Success", min_value=0, max_value=30, key="rest_success", step=1, label_visibility="collapsed")
 
-    filter_disposable = st.checkbox("Filter Disposable Emails", value=True)
-    retry_cloudflare = st.checkbox("Auto-Retry Security Challenges", value=True)
-    captcha_alert_stop = st.checkbox("🚨 Captcha Pause & Notify (Stop on Hit)", value=True)
-    sound_on_success = st.checkbox("🔔 Sound on Success / 2FA Alert", value=True)
-    soft_rate_limit = st.checkbox("📉 Soft Rate-Limit Backoff Curve", value=True)
-    extract_recovery = st.checkbox("🔮 [Predicted] Auto-Extract Recovery Info", value=True)
+    st.checkbox("Filter Disposable Emails", key="filter_disposable")
+    st.checkbox("Auto-Retry Security Challenges", key="retry_cloudflare")
+    st.checkbox("🚨 Captcha Pause & Notify (Stop on Hit)", key="captcha_alert_stop")
+    st.checkbox("🔔 Sound on Success / 2FA Alert", key="sound_on_success")
+    st.checkbox("📉 Soft Rate-Limit Backoff Curve", key="soft_rate_limit")
+    st.checkbox("🔮 [Predicted] Auto-Extract Recovery Info", key="extract_recovery")
 
 with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
     st.markdown("**Webhook Endpoint URL:**")
-    webhook_url = st.text_input("Webhook URL", value="", placeholder="https://discord.com/api/webhooks/...", label_visibility="collapsed")
+    st.text_input("Webhook URL", key="webhook_url", placeholder="https://discord.com/api/webhooks/...", label_visibility="collapsed")
 
     st.markdown("**Telegram Bot Token:**")
-    tg_token = st.text_input("Telegram Token", value="", placeholder="123456:ABC-DEF...", type="password", label_visibility="collapsed")
+    st.text_input("Telegram Token", key="tg_token", placeholder="123456:ABC-DEF...", type="password", label_visibility="collapsed")
 
     st.markdown("**Telegram Chat ID:**")
-    tg_chat_id = st.text_input("Telegram Chat ID", value="", placeholder="-100xxxxxxxxxx", label_visibility="collapsed")
+    st.text_input("Telegram Chat ID", key="tg_chat_id", placeholder="-100xxxxxxxxxx", label_visibility="collapsed")
 
-# Settings Action Buttons with Instant Reset Handler
+# --- INSTANT RESET DEFAULTS HANDLER ---
 col_sb1, col_sb2 = st.sidebar.columns(2)
 with col_sb1:
     if st.button("🔄 Reset Defaults", use_container_width=True):
-        st.session_state.reset_trigger = True
-        st.sidebar.success("Settings reset immediately!")
+        for k, v in DEFAULT_CONFIG.items():
+            st.session_state[k] = v
+        st.sidebar.success("All settings reset successfully!")
         st.rerun()
 with col_sb2:
     if st.button("💾 Apply Settings", type="primary", use_container_width=True):
@@ -407,10 +447,8 @@ with tab_proxies:
         st.download_button("📥 Export Active Proxies", data="192.168.1.10:8080\n", file_name="active_proxies.txt", use_container_width=True)
 
 with tab_terminal:
-    # --- BOBITOMAIL PRO INTERACTIVE READER & BOT DECODER SUITE ---
     st.subheader("✉️ BobitoMail Pro — Multi-Account Inbox & Bot Decoder Suite")
     
-    # Top Search & Action Bar
     srch_col, act_col1, act_col2, act_col3 = st.columns([4, 1, 1, 1])
     with srch_col:
         mail_search = st.text_input("Search across messages...", placeholder="🔍 Search sender, subject or keyword...", label_visibility="collapsed")
@@ -426,7 +464,6 @@ with tab_terminal:
             st.session_state.show_settings_panel = not st.session_state.show_settings_panel
             st.session_state.show_export_panel = False
 
-    # --- FUNCTIONAL EXPORT DRAWER ---
     if st.session_state.show_export_panel:
         st.markdown("""
         <div style="background-color: #161b22; border: 1px solid #58a6ff; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
@@ -451,7 +488,6 @@ with tab_terminal:
         )
         st.markdown("---")
 
-    # --- FUNCTIONAL SETTINGS DRAWER WITH SLIDE-OUT ADDITIONS ---
     if st.session_state.show_settings_panel:
         st.markdown("""
         <div style="background-color: #161b22; border: 1px solid #f0883e; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
@@ -460,27 +496,6 @@ with tab_terminal:
         </div>
         """, unsafe_allow_html=True)
         
-        # New Feature Addition: View Active Configuration State Dropdown & Proxy Management & Health block
-        st.session_state.active_config_state = st.selectbox(
-            "View Active Configuration State", 
-            options=["Full Telemetry JSON", "Active Proxy Pool Summary", "Thread & Worker Stats", "Stealth Flags Overview"], 
-            index=0
-        )
-        
-        st.markdown("""
-        <div style="background-color: #161b22; border: 1px solid #30363d; padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 13px; color: #58a6ff; font-weight: 600;">
-        🌐 Proxy Management & Health &nbsp;|&nbsp; Loaded Proxies: 66 &nbsp;|&nbsp; Filtered Pool: 6
-        </div>
-        """, unsafe_allow_html=True)
-
-        set_col_btn1, set_col_btn2 = st.columns(2)
-        with set_col_btn1:
-            if st.button("⚡ Fetch & Test All Proxies", use_container_width=True):
-                st.success("Proxy pool test initiated from settings drawer!")
-        with set_col_btn2:
-            with st.expander("📊 Proxy Health & Geo Dashboard"):
-                st.dataframe(st.session_state.proxy_table_data, use_container_width=True)
-
         set_col1, set_col2 = st.columns(2)
         with set_col1:
             st.session_state.display_density = st.selectbox("Display Density", options=["Compact Row View", "Expanded Preview View"], index=0 if st.session_state.display_density=="Compact Row View" else 1)
@@ -491,7 +506,6 @@ with tab_terminal:
                 st.success("Mail client preferences updated successfully!")
         st.markdown("---")
 
-    # Collapsible Expander for Account Switcher & Folders
     with st.expander("📂 Switch Account & Folders (Click to Expand/Hide Tree)", expanded=False):
         sub_tab_acc, sub_tab_fld = st.tabs(["👤 Connected Accounts", "📁 Folder Tree"])
         with sub_tab_acc:
@@ -509,7 +523,6 @@ with tab_terminal:
 
     st.markdown("---")
 
-    # Feed Header
     col_fh1, col_fh2 = st.columns([3, 1])
     with col_fh1:
         st.markdown(f"### `{folder_choice.split()[0]}` — `{selected_account}`")
@@ -517,7 +530,6 @@ with tab_terminal:
         if st.button("🔄 Refresh Feed", use_container_width=True):
             st.toast("Feed refreshed successfully.")
 
-    # --- LIVE DATASETS & PAGINATION GENERATOR ---
     page = st.session_state.current_page
     
     if page == 1:
@@ -552,7 +564,6 @@ with tab_terminal:
     if mail_search:
         mail_database = [m for m in mail_database if mail_search.lower() in m['sender'].lower() or mail_search.lower() in m['subject'].lower()]
 
-    # --- FULL-SCREEN READING VIEW VS CLICKABLE LIST ---
     if st.session_state.selected_mail_id is None:
         for item in mail_database:
             btn_label = f"📥 [Read] {item['sender']} — {item['subject']} ({item['time']})"
