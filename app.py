@@ -1,6 +1,6 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v2.2 (BobitoMail Complete Suite with Functional Export & Settings Drawer)
+# VERSION: v2.3 (BobitoMail Complete Suite with Functional Export, Settings Drawer & Active Config State)
 # DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface with Full Telemetry, Vault, Reading View, and Interactive Mailbox Actions
 # ==========================================================
 
@@ -75,6 +75,26 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- INSTANT RESET STATE HANDLER ---
+if "reset_trigger" not in st.session_state:
+    st.session_state.reset_trigger = False
+
+if st.session_state.reset_trigger:
+    st.session_state.workers = 5
+    st.session_state.deadline = 45
+    st.session_state.max_acc = 5000
+    st.session_state.delay_between_acc = 2
+    st.session_state.use_proxies = True
+    st.session_state.preflight_test = True
+    st.session_state.proxy_protocol = "HTTP/HTTPS"
+    st.session_state.rotation_strategy = "Sticky Session (Per Account)"
+    st.session_state.proxy_timeout = 10
+    st.session_state.min_proxy_score = 40
+    st.session_state.display_density = "Compact Row View"
+    st.session_state.auto_sync_interval = "30s"
+    st.session_state.decoder_sensitivity = True
+    st.session_state.reset_trigger = False
+
 # --- SESSION STATE SHELL INITIALIZATION ---
 if "proxy_nodes" not in st.session_state:
     st.session_state.proxy_nodes = [
@@ -101,7 +121,6 @@ if "live_sessions" not in st.session_state:
         "derose7@outlook.com"
     ]
 
-# Reader, Pagination, and Action State Management
 if "selected_mail_id" not in st.session_state:
     st.session_state.selected_mail_id = None
 
@@ -114,7 +133,6 @@ if "show_export_panel" not in st.session_state:
 if "show_settings_panel" not in st.session_state:
     st.session_state.show_settings_panel = False
 
-# Mail Client Preferences State
 if "display_density" not in st.session_state:
     st.session_state.display_density = "Compact Row View"
 
@@ -123,6 +141,9 @@ if "auto_sync_interval" not in st.session_state:
 
 if "decoder_sensitivity" not in st.session_state:
     st.session_state.decoder_sensitivity = True
+
+if "active_config_state" not in st.session_state:
+    st.session_state.active_config_state = "Full Telemetry JSON"
 
 # ==========================================
 # SIDEBAR CONTROL PANEL (COMPLETE SUITE)
@@ -212,11 +233,13 @@ with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
     st.markdown("**Telegram Chat ID:**")
     tg_chat_id = st.text_input("Telegram Chat ID", value="", placeholder="-100xxxxxxxxxx", label_visibility="collapsed")
 
-# Settings Action Buttons
+# Settings Action Buttons with Instant Reset Handler
 col_sb1, col_sb2 = st.sidebar.columns(2)
 with col_sb1:
     if st.button("🔄 Reset Defaults", use_container_width=True):
-        st.sidebar.info("Settings reset to defaults.")
+        st.session_state.reset_trigger = True
+        st.sidebar.success("Settings reset immediately!")
+        st.rerun()
 with col_sb2:
     if st.button("💾 Apply Settings", type="primary", use_container_width=True):
         st.sidebar.success("Configuration stored!")
@@ -287,7 +310,28 @@ with tab_engine:
     with col_filter1:
         account_filter_mode = st.selectbox(
             "Account Domain Filter",
-            options=["All Microsoft Accounts", "@outlook.com only", "@hotmail.com only", "@msn.com only", "MX-Pointed Microsoft Inboxes Only"],
+            options=[
+                "All Microsoft Accounts", 
+                "@outlook.com only", 
+                "@hotmail.com only", 
+                "@live.com only", 
+                "@msn.com only", 
+                "@passport.com only", 
+                "@windowslive.com only",
+                "@outlook.jp (Japan)",
+                "@hotmail.co.jp (Japan)",
+                "@live.jp (Japan)",
+                "@outlook.co.uk (UK)",
+                "@hotmail.co.uk (UK)",
+                "@live.co.uk (UK)",
+                "@outlook.fr (France)",
+                "@hotmail.fr (France)",
+                "@live.fr (France)",
+                "@outlook.de (Germany)",
+                "@hotmail.de (Germany)",
+                "@live.de (Germany)",
+                "MX-Pointed Microsoft Inboxes Only"
+            ],
             index=0
         )
     with col_filter2:
@@ -407,7 +451,7 @@ with tab_terminal:
         )
         st.markdown("---")
 
-    # --- FUNCTIONAL SETTINGS DRAWER ---
+    # --- FUNCTIONAL SETTINGS DRAWER WITH SLIDE-OUT ADDITIONS ---
     if st.session_state.show_settings_panel:
         st.markdown("""
         <div style="background-color: #161b22; border: 1px solid #f0883e; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
@@ -416,6 +460,27 @@ with tab_terminal:
         </div>
         """, unsafe_allow_html=True)
         
+        # New Feature Addition: View Active Configuration State Dropdown & Proxy Management & Health block
+        st.session_state.active_config_state = st.selectbox(
+            "View Active Configuration State", 
+            options=["Full Telemetry JSON", "Active Proxy Pool Summary", "Thread & Worker Stats", "Stealth Flags Overview"], 
+            index=0
+        )
+        
+        st.markdown("""
+        <div style="background-color: #161b22; border: 1px solid #30363d; padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 13px; color: #58a6ff; font-weight: 600;">
+        🌐 Proxy Management & Health &nbsp;|&nbsp; Loaded Proxies: 66 &nbsp;|&nbsp; Filtered Pool: 6
+        </div>
+        """, unsafe_allow_html=True)
+
+        set_col_btn1, set_col_btn2 = st.columns(2)
+        with set_col_btn1:
+            if st.button("⚡ Fetch & Test All Proxies", use_container_width=True):
+                st.success("Proxy pool test initiated from settings drawer!")
+        with set_col_btn2:
+            with st.expander("📊 Proxy Health & Geo Dashboard"):
+                st.dataframe(st.session_state.proxy_table_data, use_container_width=True)
+
         set_col1, set_col2 = st.columns(2)
         with set_col1:
             st.session_state.display_density = st.selectbox("Display Density", options=["Compact Row View", "Expanded Preview View"], index=0 if st.session_state.display_density=="Compact Row View" else 1)
@@ -484,20 +549,17 @@ with tab_terminal:
             {"id": "msg_100", "sender": "Archive System", "time": "10:00 AM", "subject": f"Archived Log Bundle #{page}", "body": f"This is an archived batch message loaded dynamically for page {page}. All systems nominal."}
         ]
 
-    # Optional Sidebar Quick Filter integration
     if mail_search:
         mail_database = [m for m in mail_database if mail_search.lower() in m['sender'].lower() or mail_search.lower() in m['subject'].lower()]
 
     # --- FULL-SCREEN READING VIEW VS CLICKABLE LIST ---
     if st.session_state.selected_mail_id is None:
-        # Render Clickable List Item Buttons for Mobile/Desktop Selection
         for item in mail_database:
             btn_label = f"📥 [Read] {item['sender']} — {item['subject']} ({item['time']})"
             if st.button(btn_label, key=f"btn_{item['id']}", use_container_width=True):
                 st.session_state.selected_mail_id = item['id']
                 st.rerun()
     else:
-        # Full-Screen Replacement Reading Screen
         active_mail = next((m for m in mail_database if m['id'] == st.session_state.selected_mail_id), mail_database[0])
         
         if st.button("⬅️ Back to Inbox", type="primary"):
@@ -515,7 +577,6 @@ with tab_terminal:
         </div>
         """, unsafe_allow_html=True)
 
-        # Bot Decoder Suite for Active Email
         with st.expander("🛠️ Bot Rewrite & Fake Content Decoder (Inspect Source)", expanded=False):
             st.markdown("""
             <div class="decoder-box">
@@ -531,7 +592,6 @@ with tab_terminal:
 
     st.markdown("---")
 
-    # --- FULLY FUNCTIONAL PAGINATION CONTROLS & JUMP OPTION ---
     pg_col1, pg_col2, pg_col3 = st.columns([1, 2, 1])
     with pg_col1:
         if st.button("◀️ Newer", use_container_width=True):
