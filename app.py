@@ -1,6 +1,6 @@
 # ==========================================================
 # FILE: app.py
-# VERSION: v2.4 (BobitoMail Complete Suite with Functional Sidebar Additions & Instant Reset Engine)
+# VERSION: v2.5 (BobitoMail Complete Suite - Fixes Streamlit Widget State Collision & Exact JSON Config View)
 # DESCRIPTION: Microsoft Account Sentinel Engine - BobitoMail Interface with Full Telemetry, Vault, Reading View, and Interactive Mailbox Actions
 # ==========================================================
 
@@ -76,8 +76,8 @@ st.markdown("""
 
 # --- FACTORY DEFAULTS DICTIONARY & SESSION STATE INITIALIZATION ---
 DEFAULT_CONFIG = {
-    "workers": 5,
-    "deadline": 45,
+    "workers": 10,
+    "deadline": 25,
     "max_acc": 5000,
     "delay_between_acc": 2,
     "use_proxies": True,
@@ -96,7 +96,7 @@ DEFAULT_CONFIG = {
     "warm_up": True,
     "keep_alive_js": True,
     "device_pool": True,
-    "debug_verbose": True,
+    "debug_verbose": False,
     "auto_kmsi": True,
     "speed_preset": "normal",
     "typing_speed": 50,
@@ -112,8 +112,14 @@ DEFAULT_CONFIG = {
     "webhook_url": "",
     "tg_token": "",
     "tg_chat_id": "",
-    "active_config_state": "Full Telemetry JSON"
 }
+
+# Handle safe reset trigger check before instantiating widgets
+if "reset_requested" in st.session_state and st.session_state.reset_requested:
+    for key, val in DEFAULT_CONFIG.items():
+        if key in st.session_state:
+            del st.session_state[key]
+    st.session_state.reset_requested = False
 
 for key, val in DEFAULT_CONFIG.items():
     if key not in st.session_state:
@@ -171,12 +177,34 @@ if "decoder_sensitivity" not in st.session_state:
 st.sidebar.title("🎛️ Microsoft Sentinel Panel")
 st.sidebar.markdown("Focused Exclusively on Microsoft Accounts (`login.live.com`).")
 
-# 1. Drop-down for View Active Configuration State in the slide-out panel
-st.sidebar.selectbox(
-    "View Active Configuration State",
-    options=["Full Telemetry JSON", "Active Proxy Pool Summary", "Thread & Worker Stats", "Stealth Flags Overview"],
-    key="active_config_state"
-)
+# 1. View Active Configuration State Tree View (Matching exact user requirement image)
+with st.sidebar.expander("🔍 View Active Configuration State", expanded=False):
+    active_config_dict = {
+        "MAX_WORKERS_START": st.session_state.get("workers", 10),
+        "MAX_WORKERS_MAX": 25,
+        "TIMEOUT": st.session_state.get("proxy_timeout", 10),
+        "ACCOUNT_DEADLINE": st.session_state.get("deadline", 25),
+        "MAX_ACCOUNTS": st.session_state.get("max_acc", 5000),
+        "BLACKLIST_CF": 100,
+        "ENABLE_SECRET_PORTALS": True,
+        "PROXY_MODE": "aggressive",
+        "RETRY_CONNECTION_FAILED": 0,
+        "ALLOW_SELF_SIGNED": True,
+        "PROXY_TEST_FLIGHT": st.session_state.get("preflight_test", True),
+        "SKIP_STRICT_APP_PROVIDERS": True,
+        "DEBUG": st.session_state.get("debug_verbose", False),
+        "MIN_PROXY_SCORE": st.session_state.get("min_proxy_score", 40),
+        "POOL_MODE": st.session_state.get("pool_mode", "us_only"),
+        "COUNTRY_CODE": st.session_state.get("country_code", "US"),
+        "MIX_LIST": ["US", "GB", "DE"],
+        "PROXY_FILE": "proxies.txt",
+        "RESULTS_DIR": "mail_results",
+        "CACHE_FILE": "domain_cache.json",
+        "PROXY_META_FILE": "proxy_meta.json",
+        "MAX_PROXY_TRIES": 3,
+        "PROXY_CONNECT_TIMEOUT": 4
+    }
+    st.json(active_config_dict)
 
 # 2. Proxy Management & Health block
 st.sidebar.markdown("""
@@ -188,6 +216,7 @@ Loaded Proxies: 66 &nbsp;|&nbsp; Filtered Pool: 6
 
 # 3. Drop down for Proxy Health & Geo Dashboard
 with st.sidebar.expander("📊 Proxy Health & Geo Dashboard"):
+    st.markdown("<p style='font-size: 11px; color: #8b949e;'>Displaying IP Number, Country, Region, Score, Successful, Fails</p>", unsafe_allow_html=True)
     st.dataframe(st.session_state.proxy_table_data, use_container_width=True)
 
 with st.sidebar.expander("⚙️ Execution & Thread Settings", expanded=False):
@@ -276,9 +305,7 @@ with st.sidebar.expander("🔗 Webhook & External API", expanded=False):
 col_sb1, col_sb2 = st.sidebar.columns(2)
 with col_sb1:
     if st.button("🔄 Reset Defaults", use_container_width=True):
-        for k, v in DEFAULT_CONFIG.items():
-            st.session_state[k] = v
-        st.sidebar.success("All settings reset successfully!")
+        st.session_state.reset_requested = True
         st.rerun()
 with col_sb2:
     if st.button("💾 Apply Settings", type="primary", use_container_width=True):
@@ -685,7 +712,7 @@ with tab_auditor:
     st.markdown("""
     | Control Name | Type | Target Function | Last Trigger Status |
     | :--- | :--- | :--- | :--- |
-    | **Workers Slider** | Slider | Spawns parallel Playwright instances | 🟢 Active (`Value: 5`) |
+    | **Workers Slider** | Slider | Spawns parallel Playwright instances | 🟢 Active (`Value: 10`) |
     | **Proxy Routing** | Checkbox | Routes traffic through proxy pool | 🟢 Enabled (`True`) |
     | **Fire-up on Fail** | Checkbox | Clears cookies/tab on invalid check | 🟢 Enabled (`True`) |
     | **Vault Scraper** | Tab Module | Local browser credential extraction | 🟢 Standby (`Ready`) |
