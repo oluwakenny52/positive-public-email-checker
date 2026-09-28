@@ -408,23 +408,24 @@ with tab_terminal:
         st.markdown("---")
 
     # --- FUNCTIONAL SETTINGS DRAWER ---
-    if st.session_state.show_settings_panel:
-        st.markdown("""
-        <div style="background-color: #161b22; border: 1px solid #f0883e; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-        <h4>⚙️ Mail Client Preferences</h4>
-        <p style="font-size: 13px; color: #8b949e;">Customize display modes and decoder sensitivity for active sessions:</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        set_col1, set_col2 = st.columns(2)
-        with set_col1:
-            st.session_state.display_density = st.selectbox("Display Density", options=["Compact Row View", "Expanded Preview View"], index=0 if st.session_state.display_density=="Compact Row View" else 1)
-            st.session_state.auto_sync_interval = st.selectbox("Background Sync Interval", options=["Manual Only", "15s", "30s", "1m", "5m"], index=2)
-        with set_col2:
-            st.session_state.decoder_sensitivity = st.checkbox("Enable Automatic Bot Wrapper Stripping", value=st.session_state.decoder_sensitivity)
-            if st.button("💾 Save Preferences", use_container_width=True):
-                st.success("Mail client preferences updated successfully!")
-        st.markdown("---")
+if st.session_state.show_settings_panel:
+    st.markdown("""
+    <div style="background-color: #161b22; border: 1px solid #f0883e; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+    <h4>⚙️ Mail Client Preferences</h4>
+    <p style="font-size: 13px; color: #8b949e;">Customize display modes and decoder sensitivity for active sessions:</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    set_col1, set_col2 = st.columns(2)
+    with set_col1:
+        st.session_state.display_density = st.selectbox("Display Density", options=["Compact Row View", "Expanded Preview View"], index=0 if st.session_state.display_density=="Compact Row View" else 1)
+        st.session_state.auto_sync_interval = st.selectbox("Background Sync Interval", options=["Manual Only", "15s", "30s", "1m", "5m"], index=2)
+    with set_col2:
+        st.session_state.active_config_state = st.selectbox("View Active Configuration State", options=["Full Telemetry JSON", "Active Proxy Pool Summary", "Thread & Worker Stats", "Stealth Flags Overview"], index=0)
+        st.session_state.decoder_sensitivity = st.checkbox("Enable Automatic Bot Wrapper Stripping", value=st.session_state.decoder_sensitivity)
+        if st.button("💾 Save Preferences", use_container_width=True):
+            st.success("Mail client preferences updated successfully!")
+    st.markdown("---")
 
     # Collapsible Expander for Account Switcher & Folders
     with st.expander("📂 Switch Account & Folders (Click to Expand/Hide Tree)", expanded=False):
