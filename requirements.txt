@@ -5,3 +5,5 @@ requests
 httpx
 pandas
 playwright
+pycryptodome
+pywin32; sys_platform == 'win32'
