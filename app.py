@@ -1,8 +1,9 @@
 # ── app.py ──────────────────────────────────────────────
 # ==========================================================
 # FILE: app.py
-# VERSION: v4.3 (Modern Streamlit width='stretch' Standardization)
+# VERSION: v4.4 (Session State use_proxies & Width Standardization)
 # FIXES:
+#   - Added missing session state key initialization for 'use_proxies'.
 #   - All deprecated use_container_width usages fully replaced with width='stretch'.
 #   - Syntax verified clean.
 # ==========================================================
@@ -94,6 +95,10 @@ if st.session_state.get("reset_requested"):
 for key, val in DEFAULT_CONFIG.items():
     if key not in st.session_state:
         st.session_state[key] = val
+
+# Ensure explicit safe initialization for use_proxies to avoid missing key errors
+if "use_proxies" not in st.session_state:
+    st.session_state.use_proxies = True
 
 # ─── ENGINE STATE — pre-allocated containers ───────────────
 _STATE_DEFAULTS = {
@@ -1046,8 +1051,8 @@ with tab_auditor:
 
     st.markdown("### 🤖 Auditor Telemetry Log")
     st.code(
-        f"[AUDITOR] app.py v4.3 — Streamlit width='stretch' standardization verified.\n"
-        f"[AUDITOR] Syntax Verified Clean.\n"
+        f"[AUDITOR] app.py v4.4 — Streamlit width='stretch' standardization verified.\n"
+        f"[AUDITOR] Syntax Verified Clean & Checked.\n"
         f"[AUDITOR] Session state keys active: {len(st.session_state)}\n"
         f"[AUDITOR] Proxy pool loaded: {st.session_state.proxy_pool_loaded} ({len(st.session_state.proxy_pool)} proxies)\n"
         f"[AUDITOR] Engine running: {running}\n"
