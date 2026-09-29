@@ -8,6 +8,8 @@
 #   - Syntax verified clean.
 # ==========================================================
 
+import os
+import subprocess
 import streamlit as st
 import json
 import asyncio
@@ -17,6 +19,19 @@ import pandas as pd
 from datetime import datetime
 from streamlit_folium import st_folium
 import engine_core
+# ─── AUTO-INSTALL PLAYWRIGHT ───
+@st.cache_resource
+def install_playwright():
+    try:
+        browser_path = os.path.expanduser("~/.cache/ms-playwright")
+        if not os.path.exists(browser_path) or not os.listdir(browser_path):
+            subprocess.run(["playwright", "install", "chromium"], check=True)
+    except Exception as e:
+        st.error(f"Failed to auto-install Playwright: {e}")
+
+install_playwright()
+# ───────────────────────────────
+
 
 # ─── PAGE CONFIG ──────────────────────────────────────────
 st.set_page_config(
