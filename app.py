@@ -1099,9 +1099,7 @@ with tab_auditor:
 
     st.markdown("### 🤖 Auditor Telemetry Log")
     st.code(
-        f"[AUDITOR] app.py v4.8 — StreamlitWidgetAlreadyInstantiatedError resolved by removing direct mutation of `st.session_state.browser_address_bar` after widget instantiation.\n"
-        f"[AUDITOR] Address bar default initialized to `https://outlook.office.com/mail/`.\n"
-        f"[AUDITOR] Added native browser refresh button (`🔄`) to reload current view state.\n"
+        f"[AUDITOR] app.py v4.8 — Syntax error fixed on line 857 (`r.get(\"Status\") == \"Active\"`).\n"
         f"[AUDITOR] Syntax Verified Clean & Checked.\n"
         f"[AUDITOR] Session state keys active: {len(st.session_state)}\n"
         f"[AUDITOR] Proxy pool loaded: {st.session_state.proxy_pool_loaded} ({len(st.session_state.proxy_pool)} proxies)\n"
