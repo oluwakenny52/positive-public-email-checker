@@ -854,7 +854,7 @@ with tab_proxies:
                 st.rerun()
     with col_px2:
         if st.button("🧹 Flush Dead Proxies", width='stretch'):
-            active = [r for r in st.session_state.proxy_table_rows if r.get("Status"] == "Active"]
+            active = [r for r in st.session_state.proxy_table_rows if r.get("Status") == "Active"]
             st.session_state.proxy_table_rows.clear()
             st.session_state.proxy_table_rows.extend(active)
             st.success(f"{len(active)} active proxies kept.")
